@@ -1,0 +1,16 @@
+{
+  "name": "rhyolite-record-bot",
+  "version": "1.0.0",
+  "description": "Discord bot for Rhyolite scene records, calendar tracking, plot hooks, and story recaps.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "deploy-commands": "node deploy-commands.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0"
+  }
+}
