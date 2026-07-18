@@ -88,8 +88,30 @@ async function createScene(scene) {
   return result.rows[0];
 }
 
+async function getSceneByThreadId(threadId) {
+  const query = `
+    SELECT *
+    FROM scenes
+    WHERE thread_id = $1
+    LIMIT 1;
+  `;
+
+  const values = [
+    threadId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 module.exports = {
   createScene,
+  getSceneByThreadId,
   initializeDatabase,
   pool,
   testDatabaseConnection,
