@@ -6,6 +6,10 @@ const {
   SlashCommandBuilder,
 } = require('discord.js');
 
+const {
+  testDatabaseConnection,
+} = require('./database');
+
 if (!process.env.DISCORD_TOKEN) {
   console.error('Missing the DISCORD_TOKEN environment variable.');
   process.exit(1);
@@ -32,6 +36,16 @@ client.once(Events.ClientReady, async (readyClient) => {
       guildNames.length > 0 ? guildNames.join(', ') : 'none'
     }`
   );
+
+  try {
+    const databaseTime = await testDatabaseConnection();
+
+    console.log(
+      `PostgreSQL connected successfully. Database time: ${databaseTime}`
+    );
+  } catch (error) {
+    console.error('Could not connect to PostgreSQL:', error);
+  }
 
   for (const guild of readyClient.guilds.cache.values()) {
     try {
