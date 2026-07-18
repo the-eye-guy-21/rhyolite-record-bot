@@ -1,152 +1,390 @@
-const { readFile } = require('node:fs/promises');
-const path = require('node:path');
-const { Pool } = require('pg');
+const {
+  Client,
+  EmbedBuilder,
+  Events,
+  GatewayIntentBits,
+  MessageFlags,
+  SlashCommandBuilder,
+} = require('discord.js');
 
-if (!process.env.DATABASE_URL) {
-  throw new Error('Missing the DATABASE_URL environment variable.');
-}
-
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  max: 5,
-});
-
-pool.on('error', (error) => {
-  console.error('Unexpected PostgreSQL connection error:', error);
-});
-
-async function initializeDatabase() {
-  const schemaPath = path.join(__dirname, 'schema.sql');
-  const schema = await readFile(schemaPath, 'utf8');
-
-  await pool.query(schema);
-
-  console.log('Database tables initialized successfully.');
-}
-
-async function testDatabaseConnection() {
-  const result = await pool.query(
-    'SELECT NOW() AS current_time'
-  );
-
-  return result.rows[0].current_time;
-}
-
-async function createScene(scene) {
-  const query = `
-    INSERT INTO scenes (
-      guild_id,
-      thread_id,
-      thread_name,
-      thread_url,
-      title,
-      location,
-      characters,
-      premise,
-      start_year,
-      start_season,
-      start_day,
-      start_daypart,
-      created_by_user_id
-    )
-    VALUES (
-      $1,
-      $2,
-      $3,
-      $4,
-      $5,
-      $6,
-      $7,
-      $8,
-      $9,
-      $10,
-      $11,
-      $12,
-      $13
-    )
-    RETURNING *;
-  `;
-
-  const values = [
-    scene.guildId,
-    scene.threadId,
-    scene.threadName,
-    scene.threadUrl,
-    scene.title,
-    scene.location,
-    scene.characters,
-    scene.premise,
-    scene.startYear,
-    scene.startSeason,
-    scene.startDay,
-    scene.startDaypart,
-    scene.createdByUserId,
-  ];
-
-  const result = await pool.query(query, values);
-
-  return result.rows[0];
-}
-
-async function getSceneByThreadId(threadId) {
-  const query = `
-    SELECT *
-    FROM scenes
-    WHERE thread_id = $1
-    LIMIT 1;
-  `;
-
-  const values = [
-    threadId,
-  ];
-
-  const result = await pool.query(query, values);
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  return result.rows[0];
-}
-
-async function closeScene(scene) {
-  const query = `
-    UPDATE scenes
-    SET
-      final_summary = $1,
-      end_year = $2,
-      end_season = $3,
-      end_day = $4,
-      end_daypart = $5,
-      status = 'completed',
-      updated_at = NOW()
-    WHERE thread_id = $6
-    RETURNING *;
-  `;
-
-  const values = [
-    scene.finalSummary,
-    scene.endYear,
-    scene.endSeason,
-    scene.endDay,
-    scene.endDaypart,
-    scene.threadId,
-  ];
-
-  const result = await pool.query(query, values);
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  return result.rows[0];
-}
-
-module.exports = {
+const {
   closeScene,
   createScene,
   getSceneByThreadId,
   initializeDatabase,
-  pool,
   testDatabaseConnection,
-};
+} = require('./database');
+
+const {
+  sceneCommand,
+} = require('./scene-command');
+
+if (!process.env.DISCORD_TOKEN) {
+  console.error('Missing the DISCORD_TOKEN environment variable.');
+  process.exit(1);
+}
+
+const pingCommand = new SlashCommandBuilder()
+  .setName('ping')
+  .setDescription('Check whether The Rhyolite Record is responding.');
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+  ],
+});
+
+client.once(Events.ClientReady, async (readyClient) => {
+  console.log(`The Rhyolite Record is online as ${readyClient.user.tag}.`);
+
+  try {
+    await initializeDatabase();
+
+    const databaseTime = await testDatabaseConnection();
+
+    console.log(
+      `PostgreSQL connected successfully. Database time: ${databaseTime}`
+    );
+  } catch (error) {
+    console.error('Could not initialize PostgreSQL:', error);
+  }
+
+  const commands = [
+    pingCommand.toJSON(),
+    sceneCommand.toJSON(),
+  ];
+
+  for (const guild of readyClient.guilds.cache.values()) {
+    try {
+      await guild.commands.set(commands);
+
+      console.log(
+        `Registered /ping and /scene in ${guild.name}.`
+      );
+    } catch (error) {
+      console.error(
+        `Could not register commands in ${guild.name}:`,
+        error
+      );
+    }
+  }
+});
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isChatInputCommand()) {
+    return;
+  }
+
+  if (interaction.commandName === 'ping') {
+    await interaction.reply({
+      content: 'The Rhyolite Record is connected and responding.',
+      flags: MessageFlags.Ephemeral,
+    });
+
+    return;
+  }
+
+  if (interaction.commandName !== 'scene') {
+    return;
+  }
+
+  const subcommand = interaction.options.getSubcommand();
+
+  if (subcommand === 'register') {
+    const channel = interaction.channel;
+
+    if (!interaction.inGuild() || !channel || !channel.isThread()) {
+      await interaction.reply({
+        content: 'Please use `/scene register` inside the RP thread you want to record.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    const title = interaction.options.getString(
+      'title',
+      true
+    );
+
+    const location = interaction.options.getString(
+      'location',
+      true
+    );
+
+    const characters = interaction.options.getString(
+      'characters',
+      true
+    );
+
+    const premise = interaction.options.getString(
+      'premise',
+      true
+    );
+
+    const startYear = interaction.options.getInteger(
+      'start_year',
+      true
+    );
+
+    const startSeason = interaction.options.getString(
+      'start_season',
+      true
+    );
+
+    const startDay = interaction.options.getInteger(
+      'start_day',
+      true
+    );
+
+    const startDaypart = interaction.options.getString(
+      'start_daypart',
+      true
+    );
+
+    try {
+      const savedScene = await createScene({
+        guildId: interaction.guildId,
+        threadId: channel.id,
+        threadName: channel.name,
+        threadUrl: channel.url,
+        title: title,
+        location: location,
+        characters: characters,
+        premise: premise,
+        startYear: startYear,
+        startSeason: startSeason,
+        startDay: startDay,
+        startDaypart: startDaypart,
+        createdByUserId: interaction.user.id,
+      });
+
+      await interaction.editReply({
+        content: [
+          `**Incident File #${savedScene.id} has been created.**`,
+          '',
+          `**Title:** ${savedScene.title}`,
+          `**Location:** ${savedScene.location}`,
+          `**Characters:** ${savedScene.characters}`,
+          `**Starting date:** ${capitalize(savedScene.start_season)} ${savedScene.start_day}, Year ${savedScene.start_year}`,
+          `**Daypart:** ${capitalize(savedScene.start_daypart)}`,
+          `**Status:** ${capitalize(savedScene.status)}`,
+          `**Thread:** ${savedScene.thread_url}`,
+          '',
+          '*The clerk accepts no responsibility for temporal inconsistencies.*',
+        ].join('\n'),
+      });
+    } catch (error) {
+      if (error.code === '23505') {
+        await interaction.editReply({
+          content: 'This thread already has a scene record.',
+        });
+
+        return;
+      }
+
+      console.error('Could not save scene:', error);
+
+      await interaction.editReply({
+        content: 'The scene could not be saved. Please ask a moderator to check the bot logs.',
+      });
+    }
+
+    return;
+  }
+
+  if (subcommand === 'view') {
+    const channel = interaction.channel;
+
+    if (!interaction.inGuild() || !channel || !channel.isThread()) {
+      await interaction.reply({
+        content: 'Please use `/scene view` inside the RP thread you want to examine.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    try {
+      const savedScene = await getSceneByThreadId(
+        channel.id
+      );
+
+      if (!savedScene) {
+        await interaction.editReply({
+          content: 'This thread does not have a scene record yet.',
+        });
+
+        return;
+      }
+
+      const sceneEmbed = new EmbedBuilder()
+        .setTitle(
+          `Incident File #${savedScene.id}: ${savedScene.title}`
+        )
+        .setURL(savedScene.thread_url)
+        .setDescription(savedScene.premise)
+        .addFields(
+          {
+            name: 'Location',
+            value: savedScene.location,
+          },
+          {
+            name: 'Characters',
+            value: savedScene.characters,
+          },
+          {
+            name: 'Starting Date',
+            value: `${capitalize(savedScene.start_season)} ${savedScene.start_day}, Year ${savedScene.start_year} — ${capitalize(savedScene.start_daypart)}`,
+          },
+          {
+            name: 'Status',
+            value: capitalize(savedScene.status),
+          },
+          {
+            name: 'Recorded Thread',
+            value: `[Open the thread](${savedScene.thread_url})`,
+          }
+        )
+        .setFooter({
+          text: 'The Rhyolite Record',
+        })
+        .setTimestamp(
+          new Date(savedScene.created_at)
+        );
+
+      await interaction.editReply({
+        embeds: [
+          sceneEmbed,
+        ],
+      });
+    } catch (error) {
+      console.error('Could not retrieve scene:', error);
+
+      await interaction.editReply({
+        content: 'The scene record could not be opened. Please ask a moderator to check the bot logs.',
+      });
+    }
+
+    return;
+  }
+
+  if (subcommand === 'close') {
+    const channel = interaction.channel;
+
+    if (!interaction.inGuild() || !channel || !channel.isThread()) {
+      await interaction.reply({
+        content: 'Please use `/scene close` inside the RP thread you want to complete.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    const finalSummary = interaction.options.getString(
+      'final_summary',
+      true
+    );
+
+    const endYear = interaction.options.getInteger(
+      'end_year',
+      true
+    );
+
+    const endSeason = interaction.options.getString(
+      'end_season',
+      true
+    );
+
+    const endDay = interaction.options.getInteger(
+      'end_day',
+      true
+    );
+
+    const endDaypart = interaction.options.getString(
+      'end_daypart',
+      true
+    );
+
+    try {
+      const existingScene = await getSceneByThreadId(
+        channel.id
+      );
+
+      if (!existingScene) {
+        await interaction.editReply({
+          content: 'This thread does not have a scene record yet. Use `/scene register` first.',
+        });
+
+        return;
+      }
+
+      if (existingScene.status === 'completed') {
+        await interaction.editReply({
+          content: 'This scene has already been completed.',
+        });
+
+        return;
+      }
+
+      const completedScene = await closeScene({
+        threadId: channel.id,
+        finalSummary: finalSummary,
+        endYear: endYear,
+        endSeason: endSeason,
+        endDay: endDay,
+        endDaypart: endDaypart,
+      });
+
+      await interaction.editReply({
+        content: [
+          `**Incident File #${completedScene.id} has been closed.**`,
+          '',
+          `**Title:** ${completedScene.title}`,
+          `**Status:** ${capitalize(completedScene.status)}`,
+          `**Ending date:** ${capitalize(completedScene.end_season)} ${completedScene.end_day}, Year ${completedScene.end_year}`,
+          `**Daypart:** ${capitalize(completedScene.end_daypart)}`,
+          '',
+          '**Final Summary**',
+          completedScene.final_summary,
+          '',
+          '*The record has been filed. The timeline remains somebody else’s problem.*',
+        ].join('\n'),
+      });
+    } catch (error) {
+      console.error('Could not close scene:', error);
+
+      await interaction.editReply({
+        content: 'The scene could not be completed. Please ask a moderator to check the bot logs.',
+      });
+    }
+  }
+});
+
+client.on(Events.Error, (error) => {
+  console.error('Discord client error:', error);
+});
+
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM from Railway. Disconnecting from Discord.');
+  client.destroy();
+  process.exit(0);
+});
+
+function capitalize(word) {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+client.login(process.env.DISCORD_TOKEN);
