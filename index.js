@@ -226,12 +226,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
+      const descriptionLines = [
+        '**Premise**',
+        savedScene.premise,
+      ];
+
+      if (
+        savedScene.status === 'completed'
+        && savedScene.final_summary
+      ) {
+        descriptionLines.push(
+          '',
+          '**Final Summary**',
+          savedScene.final_summary
+        );
+      }
+
       const sceneEmbed = new EmbedBuilder()
         .setTitle(
           `Incident File #${savedScene.id}: ${savedScene.title}`
         )
         .setURL(savedScene.thread_url)
-        .setDescription(savedScene.premise)
+        .setDescription(
+          descriptionLines.join('\n')
+        )
         .addFields(
           {
             name: 'Location',
@@ -256,10 +274,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
         )
         .setFooter({
           text: 'The Rhyolite Record',
-        })
-        .setTimestamp(
+        });
+
+      if (
+        savedScene.status === 'completed'
+        && savedScene.end_year
+      ) {
+        sceneEmbed.addFields({
+          name: 'Ending Date',
+          value: `${capitalize(savedScene.end_season)} ${savedScene.end_day}, Year ${savedScene.end_year} — ${capitalize(savedScene.end_daypart)}`,
+        });
+      }
+
+      if (savedScene.status === 'completed') {
+        sceneEmbed.setTimestamp(
+          new Date(savedScene.updated_at)
+        );
+      } else {
+        sceneEmbed.setTimestamp(
           new Date(savedScene.created_at)
         );
+      }
 
       await interaction.editReply({
         embeds: [
@@ -367,7 +402,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       console.error('Could not close scene:', error);
 
       await interaction.editReply({
-        content: 'The scene could not be completed. Please ask a moderator to check the bot logs.',
+        content: 'The scene could not be completed. Please ask a moderator to check the newest Railway logs.',
       });
     }
   }
