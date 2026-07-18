@@ -1,5 +1,6 @@
 const {
   Client,
+  EmbedBuilder,
   Events,
   GatewayIntentBits,
   MessageFlags,
@@ -8,6 +9,7 @@ const {
 
 const {
   createScene,
+  getSceneByThreadId,
   initializeDatabase,
   testDatabaseConnection,
 } = require('./database');
@@ -81,10 +83,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
-  if (
-    interaction.commandName === 'scene'
-    && interaction.options.getSubcommand() === 'register'
-  ) {
+  if (interaction.commandName !== 'scene') {
+    return;
+  }
+
+  const subcommand = interaction.options.getSubcommand();
+
+  if (subcommand === 'register') {
     const channel = interaction.channel;
 
     if (!interaction.inGuild() || !channel || !channel.isThread()) {
@@ -185,6 +190,86 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.editReply({
         content: 'The scene could not be saved. Please ask a moderator to check the bot logs.',
+      });
+    }
+
+    return;
+  }
+
+  if (subcommand === 'view') {
+    const channel = interaction.channel;
+
+    if (!interaction.inGuild() || !channel || !channel.isThread()) {
+      await interaction.reply({
+        content: 'Please use `/scene view` inside the RP thread you want to examine.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    try {
+      const savedScene = await getSceneByThreadId(
+        channel.id
+      );
+
+      if (!savedScene) {
+        await interaction.editReply({
+          content: 'This thread does not have a scene record yet.',
+        });
+
+        return;
+      }
+
+      const sceneEmbed = new EmbedBuilder()
+        .setTitle(
+          `Incident File #${savedScene.id}: ${savedScene.title}`
+        )
+        .setURL(savedScene.thread_url)
+        .setDescription(savedScene.premise)
+        .addFields(
+          {
+            name: 'Location',
+            value: savedScene.location,
+          },
+          {
+            name: 'Characters',
+            value: savedScene.characters,
+          },
+          {
+            name: 'Starting Date',
+            value: `${capitalize(savedScene.start_season)} ${savedScene.start_day}, Year ${savedScene.start_year} — ${capitalize(savedScene.start_daypart)}`,
+          },
+          {
+            name: 'Status',
+            value: capitalize(savedScene.status),
+          },
+          {
+            name: 'Recorded Thread',
+            value: `[Open the thread](${savedScene.thread_url})`,
+          }
+        )
+        .setFooter({
+          text: 'The Rhyolite Record',
+        })
+        .setTimestamp(
+          new Date(savedScene.created_at)
+        );
+
+      await interaction.editReply({
+        embeds: [
+          sceneEmbed,
+        ],
+      });
+    } catch (error) {
+      console.error('Could not retrieve scene:', error);
+
+      await interaction.editReply({
+        content: 'The scene record could not be opened. Please ask a moderator to check the bot logs.',
       });
     }
   }
