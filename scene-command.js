@@ -5,6 +5,7 @@ const {
 const sceneCommand = new SlashCommandBuilder()
   .setName('scene')
   .setDescription('Create and manage Rhyolite scene records.')
+
   .addSubcommand((subcommand) =>
     subcommand
       .setName('register')
@@ -117,6 +118,12 @@ const sceneCommand = new SlashCommandBuilder()
           )
           .setRequired(true)
       )
+  )
+
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('view')
+      .setDescription('View the scene record for the current thread.')
   );
 
 module.exports = {
