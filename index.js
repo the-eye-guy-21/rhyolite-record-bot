@@ -7,6 +7,7 @@ const {
 } = require('discord.js');
 
 const {
+  initializeDatabase,
   testDatabaseConnection,
 } = require('./database');
 
@@ -38,13 +39,15 @@ client.once(Events.ClientReady, async (readyClient) => {
   );
 
   try {
+    await initializeDatabase();
+
     const databaseTime = await testDatabaseConnection();
 
     console.log(
       `PostgreSQL connected successfully. Database time: ${databaseTime}`
     );
   } catch (error) {
-    console.error('Could not connect to PostgreSQL:', error);
+    console.error('Could not initialize PostgreSQL:', error);
   }
 
   for (const guild of readyClient.guilds.cache.values()) {
