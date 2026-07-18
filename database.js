@@ -1,3 +1,5 @@
+const { readFile } = require('node:fs/promises');
+const path = require('node:path');
 const { Pool } = require('pg');
 
 if (!process.env.DATABASE_URL) {
@@ -13,6 +15,16 @@ pool.on('error', (error) => {
   console.error('Unexpected PostgreSQL connection error:', error);
 });
 
+async function initializeDatabase() {
+  const schemaPath = path.join(__dirname, 'schema.sql');
+
+  const schema = await readFile(schemaPath, 'utf8');
+
+  await pool.query(schema);
+
+  console.log('Database tables initialized successfully.');
+}
+
 async function testDatabaseConnection() {
   const result = await pool.query(
     'SELECT NOW() AS current_time'
@@ -22,6 +34,7 @@ async function testDatabaseConnection() {
 }
 
 module.exports = {
+  initializeDatabase,
   pool,
   testDatabaseConnection,
 };
