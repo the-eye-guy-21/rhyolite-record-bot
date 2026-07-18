@@ -7,6 +7,7 @@ const {
 } = require('discord.js');
 
 const {
+  createScene,
   initializeDatabase,
   testDatabaseConnection,
 } = require('./database');
@@ -64,10 +65,6 @@ client.once(Events.ClientReady, async (readyClient) => {
       );
     }
   }
-
-  setInterval(() => {
-    console.log(`Heartbeat: connected at ${new Date().toISOString()}`);
-  }, 60_000);
 });
 
 client.on(Events.InteractionCreate, async (interaction) => {
@@ -88,6 +85,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
     interaction.commandName === 'scene'
     && interaction.options.getSubcommand() === 'register'
   ) {
+    const channel = interaction.channel;
+
+    if (!interaction.inGuild() || !channel || !channel.isThread()) {
+      await interaction.reply({
+        content: 'Please use `/scene register` inside the RP thread you want to record.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
     const title = interaction.options.getString(
       'title',
       true
@@ -128,21 +140,53 @@ client.on(Events.InteractionCreate, async (interaction) => {
       true
     );
 
-    await interaction.reply({
-      content: [
-        '**Scene information received successfully.**',
-        '',
-        `**Title:** ${title}`,
-        `**Location:** ${location}`,
-        `**Characters:** ${characters}`,
-        `**Starting date:** ${capitalize(startSeason)} ${startDay}, Year ${startYear}`,
-        `**Daypart:** ${capitalize(startDaypart)}`,
-        `**Premise:** ${premise}`,
-        '',
-        'This is only a test. The scene has not been saved yet.',
-      ].join('\n'),
-      flags: MessageFlags.Ephemeral,
-    });
+    try {
+      const savedScene = await createScene({
+        guildId: interaction.guildId,
+        threadId: channel.id,
+        threadName: channel.name,
+        threadUrl: channel.url,
+        title: title,
+        location: location,
+        characters: characters,
+        premise: premise,
+        startYear: startYear,
+        startSeason: startSeason,
+        startDay: startDay,
+        startDaypart: startDaypart,
+        createdByUserId: interaction.user.id,
+      });
+
+      await interaction.editReply({
+        content: [
+          `**Incident File #${savedScene.id} has been created.**`,
+          '',
+          `**Title:** ${savedScene.title}`,
+          `**Location:** ${savedScene.location}`,
+          `**Characters:** ${savedScene.characters}`,
+          `**Starting date:** ${capitalize(savedScene.start_season)} ${savedScene.start_day}, Year ${savedScene.start_year}`,
+          `**Daypart:** ${capitalize(savedScene.start_daypart)}`,
+          `**Status:** ${capitalize(savedScene.status)}`,
+          `**Thread:** ${savedScene.thread_url}`,
+          '',
+          '*The clerk accepts no responsibility for temporal inconsistencies.*',
+        ].join('\n'),
+      });
+    } catch (error) {
+      if (error.code === '23505') {
+        await interaction.editReply({
+          content: 'This thread already has a scene record.',
+        });
+
+        return;
+      }
+
+      console.error('Could not save scene:', error);
+
+      await interaction.editReply({
+        content: 'The scene could not be saved. Please ask a moderator to check the bot logs.',
+      });
+    }
   }
 });
 
