@@ -109,7 +109,41 @@ async function getSceneByThreadId(threadId) {
   return result.rows[0];
 }
 
+async function closeScene(scene) {
+  const query = `
+    UPDATE scenes
+    SET
+      final_summary = $1,
+      end_year = $2,
+      end_season = $3,
+      end_day = $4,
+      end_daypart = $5,
+      status = 'completed',
+      updated_at = NOW()
+    WHERE thread_id = $6
+    RETURNING *;
+  `;
+
+  const values = [
+    scene.finalSummary,
+    scene.endYear,
+    scene.endSeason,
+    scene.endDay,
+    scene.endDaypart,
+    scene.threadId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 module.exports = {
+  closeScene,
   createScene,
   getSceneByThreadId,
   initializeDatabase,
