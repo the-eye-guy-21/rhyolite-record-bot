@@ -11,6 +11,10 @@ const {
   testDatabaseConnection,
 } = require('./database');
 
+const {
+  sceneCommand,
+} = require('./scene-command');
+
 if (!process.env.DISCORD_TOKEN) {
   console.error('Missing the DISCORD_TOKEN environment variable.');
   process.exit(1);
@@ -28,15 +32,6 @@ const client = new Client({
 
 client.once(Events.ClientReady, async (readyClient) => {
   console.log(`The Rhyolite Record is online as ${readyClient.user.tag}.`);
-  console.log(`Bot user ID: ${readyClient.user.id}`);
-
-  const guildNames = readyClient.guilds.cache.map((guild) => guild.name);
-
-  console.log(
-    `Connected to ${guildNames.length} server(s): ${
-      guildNames.length > 0 ? guildNames.join(', ') : 'none'
-    }`
-  );
 
   try {
     await initializeDatabase();
@@ -50,15 +45,23 @@ client.once(Events.ClientReady, async (readyClient) => {
     console.error('Could not initialize PostgreSQL:', error);
   }
 
+  const commands = [
+    pingCommand.toJSON(),
+    sceneCommand.toJSON(),
+  ];
+
   for (const guild of readyClient.guilds.cache.values()) {
     try {
-      await guild.commands.set([
-        pingCommand.toJSON(),
-      ]);
+      await guild.commands.set(commands);
 
-      console.log(`Registered /ping in ${guild.name}.`);
+      console.log(
+        `Registered /ping and /scene in ${guild.name}.`
+      );
     } catch (error) {
-      console.error(`Could not register /ping in ${guild.name}:`, error);
+      console.error(
+        `Could not register commands in ${guild.name}:`,
+        error
+      );
     }
   }
 
@@ -77,6 +80,69 @@ client.on(Events.InteractionCreate, async (interaction) => {
       content: 'The Rhyolite Record is connected and responding.',
       flags: MessageFlags.Ephemeral,
     });
+
+    return;
+  }
+
+  if (
+    interaction.commandName === 'scene'
+    && interaction.options.getSubcommand() === 'register'
+  ) {
+    const title = interaction.options.getString(
+      'title',
+      true
+    );
+
+    const location = interaction.options.getString(
+      'location',
+      true
+    );
+
+    const characters = interaction.options.getString(
+      'characters',
+      true
+    );
+
+    const premise = interaction.options.getString(
+      'premise',
+      true
+    );
+
+    const startYear = interaction.options.getInteger(
+      'start_year',
+      true
+    );
+
+    const startSeason = interaction.options.getString(
+      'start_season',
+      true
+    );
+
+    const startDay = interaction.options.getInteger(
+      'start_day',
+      true
+    );
+
+    const startDaypart = interaction.options.getString(
+      'start_daypart',
+      true
+    );
+
+    await interaction.reply({
+      content: [
+        '**Scene information received successfully.**',
+        '',
+        `**Title:** ${title}`,
+        `**Location:** ${location}`,
+        `**Characters:** ${characters}`,
+        `**Starting date:** ${capitalize(startSeason)} ${startDay}, Year ${startYear}`,
+        `**Daypart:** ${capitalize(startDaypart)}`,
+        `**Premise:** ${premise}`,
+        '',
+        'This is only a test. The scene has not been saved yet.',
+      ].join('\n'),
+      flags: MessageFlags.Ephemeral,
+    });
   }
 });
 
@@ -89,5 +155,9 @@ process.on('SIGTERM', () => {
   client.destroy();
   process.exit(0);
 });
+
+function capitalize(word) {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}
 
 client.login(process.env.DISCORD_TOKEN);
