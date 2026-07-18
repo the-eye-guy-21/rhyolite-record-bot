@@ -8,6 +8,7 @@ const {
 } = require('discord.js');
 
 const {
+  closeScene,
   createScene,
   getSceneByThreadId,
   initializeDatabase,
@@ -270,6 +271,103 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.editReply({
         content: 'The scene record could not be opened. Please ask a moderator to check the bot logs.',
+      });
+    }
+
+    return;
+  }
+
+  if (subcommand === 'close') {
+    const channel = interaction.channel;
+
+    if (!interaction.inGuild() || !channel || !channel.isThread()) {
+      await interaction.reply({
+        content: 'Please use `/scene close` inside the RP thread you want to complete.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    const finalSummary = interaction.options.getString(
+      'final_summary',
+      true
+    );
+
+    const endYear = interaction.options.getInteger(
+      'end_year',
+      true
+    );
+
+    const endSeason = interaction.options.getString(
+      'end_season',
+      true
+    );
+
+    const endDay = interaction.options.getInteger(
+      'end_day',
+      true
+    );
+
+    const endDaypart = interaction.options.getString(
+      'end_daypart',
+      true
+    );
+
+    try {
+      const existingScene = await getSceneByThreadId(
+        channel.id
+      );
+
+      if (!existingScene) {
+        await interaction.editReply({
+          content: 'This thread does not have a scene record yet. Use `/scene register` first.',
+        });
+
+        return;
+      }
+
+      if (existingScene.status === 'completed') {
+        await interaction.editReply({
+          content: 'This scene has already been completed.',
+        });
+
+        return;
+      }
+
+      const completedScene = await closeScene({
+        threadId: channel.id,
+        finalSummary: finalSummary,
+        endYear: endYear,
+        endSeason: endSeason,
+        endDay: endDay,
+        endDaypart: endDaypart,
+      });
+
+      await interaction.editReply({
+        content: [
+          `**Incident File #${completedScene.id} has been closed.**`,
+          '',
+          `**Title:** ${completedScene.title}`,
+          `**Status:** ${capitalize(completedScene.status)}`,
+          `**Ending date:** ${capitalize(completedScene.end_season)} ${completedScene.end_day}, Year ${completedScene.end_year}`,
+          `**Daypart:** ${capitalize(completedScene.end_daypart)}`,
+          '',
+          '**Final Summary**',
+          completedScene.final_summary,
+          '',
+          '*The record has been filed. The timeline remains somebody else’s problem.*',
+        ].join('\n'),
+      });
+    } catch (error) {
+      console.error('Could not close scene:', error);
+
+      await interaction.editReply({
+        content: 'The scene could not be completed. Please ask a moderator to check the bot logs.',
       });
     }
   }
