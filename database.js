@@ -17,7 +17,6 @@ pool.on('error', (error) => {
 
 async function initializeDatabase() {
   const schemaPath = path.join(__dirname, 'schema.sql');
-
   const schema = await readFile(schemaPath, 'utf8');
 
   await pool.query(schema);
@@ -33,7 +32,64 @@ async function testDatabaseConnection() {
   return result.rows[0].current_time;
 }
 
+async function createScene(scene) {
+  const query = `
+    INSERT INTO scenes (
+      guild_id,
+      thread_id,
+      thread_name,
+      thread_url,
+      title,
+      location,
+      characters,
+      premise,
+      start_year,
+      start_season,
+      start_day,
+      start_daypart,
+      created_by_user_id
+    )
+    VALUES (
+      $1,
+      $2,
+      $3,
+      $4,
+      $5,
+      $6,
+      $7,
+      $8,
+      $9,
+      $10,
+      $11,
+      $12,
+      $13
+    )
+    RETURNING *;
+  `;
+
+  const values = [
+    scene.guildId,
+    scene.threadId,
+    scene.threadName,
+    scene.threadUrl,
+    scene.title,
+    scene.location,
+    scene.characters,
+    scene.premise,
+    scene.startYear,
+    scene.startSeason,
+    scene.startDay,
+    scene.startDaypart,
+    scene.createdByUserId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  return result.rows[0];
+}
+
 module.exports = {
+  createScene,
   initializeDatabase,
   pool,
   testDatabaseConnection,
