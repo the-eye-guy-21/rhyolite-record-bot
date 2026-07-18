@@ -1,4 +1,5 @@
 const {
+  ActivityType,
   Client,
   Events,
   GatewayIntentBits,
@@ -19,13 +20,43 @@ const client = new Client({
 
 // Run this once Discord confirms that the bot is connected.
 client.once(Events.ClientReady, (readyClient) => {
+  readyClient.user.setPresence({
+    status: 'online',
+    activities: [
+      {
+        name: 'the Rhyolite records',
+        type: ActivityType.Watching,
+      },
+    ],
+  });
+
+  const guildNames = readyClient.guilds.cache.map((guild) => guild.name);
+
   console.log(`The Rhyolite Record is online as ${readyClient.user.tag}.`);
+  console.log(`Bot user ID: ${readyClient.user.id}`);
+  console.log(
+    `Connected to ${guildNames.length} server(s): ${
+      guildNames.length > 0 ? guildNames.join(', ') : 'none'
+    }`
+  );
+
+  // Print once per minute so we can confirm that the process remains alive.
+  setInterval(() => {
+    console.log(`Heartbeat: connected at ${new Date().toISOString()}`);
+  }, 60_000);
 });
 
-// Report unexpected Discord errors in the deployment logs.
+// Report unexpected Discord errors in Railway.
 client.on(Events.Error, (error) => {
   console.error('Discord client error:', error);
 });
 
-// Sign in using the private token that we will later store in Railway.
+// Clearly record when Railway asks the program to shut down.
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM from Railway. Disconnecting from Discord.');
+  client.destroy();
+  process.exit(0);
+});
+
+// Sign in using the private token stored in Railway.
 client.login(process.env.DISCORD_TOKEN);
