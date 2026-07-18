@@ -3,24 +3,24 @@ const {
   Client,
   Events,
   GatewayIntentBits,
+  MessageFlags,
+  SlashCommandBuilder,
 } = require('discord.js');
 
-// Stop immediately with a clear error if the bot token is missing.
 if (!process.env.DISCORD_TOKEN) {
   console.error('Missing the DISCORD_TOKEN environment variable.');
   process.exit(1);
 }
 
-// Create the connection between this program and Discord.
+const pingCommand = new SlashCommandBuilder()
+  .setName('ping')
+  .setDescription('Check whether The Rhyolite Record is responding.');
+
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
   ],
-});
-
-// Run this once Discord confirms that the bot is connected.
-client.once(Events.ClientReady, (readyClient) => {
-  readyClient.user.setPresence({
+  presence: {
     status: 'online',
     activities: [
       {
@@ -28,35 +28,146 @@ client.once(Events.ClientReady, (readyClient) => {
         type: ActivityType.Watching,
       },
     ],
-  });
+  },
+});
+
+client.once(Events.ClientReady, async (readyClient) => {
+  console.log(`The Rhyolite Record is online as ${readyClient.user.tag}.`);
+  console.log(`Bot user ID: ${readyClient.user.id}`);
 
   const guildNames = readyClient.guilds.cache.map((guild) => guild.name);
 
-  console.log(`The Rhyolite Record is online as ${readyClient.user.tag}.`);
-  console.log(`Bot user ID: ${readyClient.user.id}`);
   console.log(
     `Connected to ${guildNames.length} server(s): ${
       guildNames.length > 0 ? guildNames.join(', ') : 'none'
     }`
   );
 
-  // Print once per minute so we can confirm that the process remains alive.
+  // Register the test command in every server the bot has joined.
+  for (const guild of readyClient.guilds.cache.values()) {
+    try {
+      await guild.commands.set([
+        pingCommand.toJSON(),
+      ]);
+
+      console.log(`Registered /ping in ${guild.name}.`);
+    } catch (error) {
+      console.error(`Could not register /ping in ${guild.name}:`, error);
+    }
+  }
+
   setInterval(() => {
     console.log(`Heartbeat: connected at ${new Date().toISOString()}`);
   }, 60_000);
 });
 
-// Report unexpected Discord errors in Railway.
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isChatInputCommand()) {
+    return;
+  }
+
+  if (interaction.commandName === 'ping') {
+    await interaction.reply({
+      content: 'The Rhyolite Record is connected and responding.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+});
+
 client.on(Events.Error, (error) => {
   console.error('Discord client error:', error);
 });
 
-// Clearly record when Railway asks the program to shut down.
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM from Railway. Disconnecting from Discord.');
   client.destroy();
   process.exit(0);
 });
 
-// Sign in using the private token stored in Railway.
+client.login(process.env.DISCORD_TOKEN);const {
+  ActivityType,
+  Client,
+  Events,
+  GatewayIntentBits,
+  MessageFlags,
+  SlashCommandBuilder,
+} = require('discord.js');
+
+if (!process.env.DISCORD_TOKEN) {
+  console.error('Missing the DISCORD_TOKEN environment variable.');
+  process.exit(1);
+}
+
+const pingCommand = new SlashCommandBuilder()
+  .setName('ping')
+  .setDescription('Check whether The Rhyolite Record is responding.');
+
+const client = new Client({
+  intents: [
+    GatewayIntentBits.Guilds,
+  ],
+  presence: {
+    status: 'online',
+    activities: [
+      {
+        name: 'the Rhyolite records',
+        type: ActivityType.Watching,
+      },
+    ],
+  },
+});
+
+client.once(Events.ClientReady, async (readyClient) => {
+  console.log(`The Rhyolite Record is online as ${readyClient.user.tag}.`);
+  console.log(`Bot user ID: ${readyClient.user.id}`);
+
+  const guildNames = readyClient.guilds.cache.map((guild) => guild.name);
+
+  console.log(
+    `Connected to ${guildNames.length} server(s): ${
+      guildNames.length > 0 ? guildNames.join(', ') : 'none'
+    }`
+  );
+
+  // Register the test command in every server the bot has joined.
+  for (const guild of readyClient.guilds.cache.values()) {
+    try {
+      await guild.commands.set([
+        pingCommand.toJSON(),
+      ]);
+
+      console.log(`Registered /ping in ${guild.name}.`);
+    } catch (error) {
+      console.error(`Could not register /ping in ${guild.name}:`, error);
+    }
+  }
+
+  setInterval(() => {
+    console.log(`Heartbeat: connected at ${new Date().toISOString()}`);
+  }, 60_000);
+});
+
+client.on(Events.InteractionCreate, async (interaction) => {
+  if (!interaction.isChatInputCommand()) {
+    return;
+  }
+
+  if (interaction.commandName === 'ping') {
+    await interaction.reply({
+      content: 'The Rhyolite Record is connected and responding.',
+      flags: MessageFlags.Ephemeral,
+    });
+  }
+});
+
+client.on(Events.Error, (error) => {
+  console.error('Discord client error:', error);
+});
+
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM from Railway. Disconnecting from Discord.');
+  client.destroy();
+  process.exit(0);
+});
+
 client.login(process.env.DISCORD_TOKEN);
