@@ -16,14 +16,6 @@ const {
 } = require('./database');
 
 const {
-  calendarCommand,
-} = require('./calendar-command');
-
-const {
-  handleCalendarCommand,
-} = require('./calendar-handler');
-
-const {
   sceneCommand,
 } = require('./scene-command');
 
@@ -60,7 +52,6 @@ client.once(Events.ClientReady, async (readyClient) => {
   const commands = [
     pingCommand.toJSON(),
     sceneCommand.toJSON(),
-    calendarCommand.toJSON(),
   ];
 
   for (const guild of readyClient.guilds.cache.values()) {
@@ -68,7 +59,7 @@ client.once(Events.ClientReady, async (readyClient) => {
       await guild.commands.set(commands);
 
       console.log(
-        `Registered /ping, /scene, and /calendar in ${guild.name}.`
+        `Registered /ping and /scene in ${guild.name}.`
       );
     } catch (error) {
       console.error(
@@ -89,12 +80,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
       content: 'The Rhyolite Record is connected and responding.',
       flags: MessageFlags.Ephemeral,
     });
-
-    return;
-  }
-
-  if (interaction.commandName === 'calendar') {
-    await handleCalendarCommand(interaction);
 
     return;
   }
