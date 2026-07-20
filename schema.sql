@@ -99,3 +99,38 @@ CREATE TABLE IF NOT EXISTS scenes (
     )
   )
 );
+
+CREATE TABLE IF NOT EXISTS calendar_state (
+  guild_id TEXT PRIMARY KEY,
+
+  current_year INTEGER NOT NULL
+    CHECK (current_year >= 1),
+
+  current_season TEXT NOT NULL
+    CHECK (
+      current_season IN (
+        'spring',
+        'summer',
+        'fall',
+        'winter'
+      )
+    ),
+
+  current_day INTEGER NOT NULL
+    CHECK (current_day BETWEEN 1 AND 28),
+
+  current_daypart TEXT NOT NULL
+    CHECK (
+      current_daypart IN (
+        'morning',
+        'midmorning',
+        'afternoon',
+        'evening',
+        'night',
+        'unspecified'
+      )
+    ),
+
+  updated_by_user_id TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
