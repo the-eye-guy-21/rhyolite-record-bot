@@ -8,6 +8,7 @@ const {
 } = require('discord.js');
 
 const {
+  attachArchiveMessage,
   closeScene,
   createScene,
   getSceneByThreadId,
@@ -15,6 +16,10 @@ const {
   initializeDatabase,
   testDatabaseConnection,
 } = require('./database');
+
+const {
+  publishSceneArchive,
+} = require('./archive');
 
 const {
   sceneCommand,
@@ -147,8 +152,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
       true
     );
 
+    let savedScene;
+
     try {
-      const savedScene = await createScene({
+      savedScene = await createScene({
         guildId: interaction.guildId,
         threadId: channel.id,
         threadName: channel.name,
@@ -163,22 +170,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         startDaypart: startDaypart,
         createdByUserId: interaction.user.id,
       });
-
-      await interaction.editReply({
-        content: [
-          `**Incident File #${savedScene.id} has been created.**`,
-          '',
-          `**Title:** ${savedScene.title}`,
-          `**Location:** ${savedScene.location}`,
-          `**Characters:** ${savedScene.characters}`,
-          `**Starting date:** ${capitalize(savedScene.start_season)} ${savedScene.start_day}, Year ${savedScene.start_year}`,
-          `**Daypart:** ${capitalize(savedScene.start_daypart)}`,
-          `**Status:** ${capitalize(savedScene.status)}`,
-          `**Thread:** ${savedScene.thread_url}`,
-          '',
-          '*The clerk accepts no responsibility for temporal inconsistencies.*',
-        ].join('\n'),
-      });
     } catch (error) {
       if (error.code === '23505') {
         await interaction.editReply({
@@ -192,6 +183,48 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
       await interaction.editReply({
         content: 'The scene could not be saved. Please ask a moderator to check the Railway logs.',
+      });
+
+      return;
+    }
+
+    try {
+      const archiveMessage = await publishSceneArchive(
+        client,
+        savedScene
+      );
+
+      await attachArchiveMessage({
+        channelId: archiveMessage.channelId,
+        messageId: archiveMessage.id,
+        threadId: channel.id,
+      });
+
+      await interaction.editReply({
+        content: [
+          `**Incident File #${savedScene.id} has been created.**`,
+          '',
+          `**Title:** ${savedScene.title}`,
+          `**Starting date:** ${capitalize(savedScene.start_season)} ${savedScene.start_day}, Year ${savedScene.start_year}`,
+          `**Status:** ${capitalize(savedScene.status)}`,
+          `**Public record:** ${archiveMessage.url}`,
+          '',
+          '*The clerk accepts no responsibility for temporal inconsistencies.*',
+        ].join('\n'),
+      });
+    } catch (error) {
+      console.error(
+        'Scene saved, but archive publication failed:',
+        error
+      );
+
+      await interaction.editReply({
+        content: [
+          `**Incident File #${savedScene.id} was saved successfully.**`,
+          '',
+          'The public archive card could not be posted. Please ask a moderator to check the Railway logs.',
+          'Do not register the thread again; its database record already exists.',
+        ].join('\n'),
       });
     }
 
