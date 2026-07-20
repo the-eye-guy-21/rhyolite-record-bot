@@ -214,6 +214,12 @@ const sceneCommand = new SlashCommandBuilder()
           )
           .setRequired(true)
       )
+  )
+
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('list')
+      .setDescription('List the 10 latest scene records.')
   );
 
 module.exports = {
