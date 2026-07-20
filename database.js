@@ -142,55 +142,29 @@ async function closeScene(scene) {
   return result.rows[0];
 }
 
-async function setCalendarState(calendar) {
-  const query = `
-    INSERT INTO calendar_state (
-      guild_id,
-      current_year,
-      current_season,
-      current_day,
-      current_daypart,
-      updated_by_user_id
-    )
-    VALUES (
-      $1,
-      $2,
-      $3,
-      $4,
-      $5,
-      $6
-    )
-    ON CONFLICT (guild_id)
-    DO UPDATE SET
-      current_year = EXCLUDED.current_year,
-      current_season = EXCLUDED.current_season,
-      current_day = EXCLUDED.current_day,
-      current_daypart = EXCLUDED.current_daypart,
-      updated_by_user_id = EXCLUDED.updated_by_user_id,
-      updated_at = NOW()
-    RETURNING *;
-  `;
-
-  const values = [
-    calendar.guildId,
-    calendar.currentYear,
-    calendar.currentSeason,
-    calendar.currentDay,
-    calendar.currentDaypart,
-    calendar.updatedByUserId,
-  ];
-
-  const result = await pool.query(query, values);
-
-  return result.rows[0];
-}
-
-async function getCalendarState(guildId) {
+async function getSceneList(guildId) {
   const query = `
     SELECT *
-    FROM calendar_state
+    FROM scenes
     WHERE guild_id = $1
-    LIMIT 1;
+    ORDER BY
+      start_year DESC,
+      CASE start_season
+        WHEN 'winter' THEN 4
+        WHEN 'fall' THEN 3
+        WHEN 'summer' THEN 2
+        WHEN 'spring' THEN 1
+      END DESC,
+      start_day DESC,
+      CASE start_daypart
+        WHEN 'night' THEN 5
+        WHEN 'evening' THEN 4
+        WHEN 'afternoon' THEN 3
+        WHEN 'midmorning' THEN 2
+        WHEN 'morning' THEN 1
+        ELSE 0
+      END DESC
+    LIMIT 10;
   `;
 
   const values = [
@@ -199,20 +173,15 @@ async function getCalendarState(guildId) {
 
   const result = await pool.query(query, values);
 
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  return result.rows[0];
+  return result.rows;
 }
 
 module.exports = {
   closeScene,
   createScene,
-  getCalendarState,
   getSceneByThreadId,
+  getSceneList,
   initializeDatabase,
   pool,
-  setCalendarState,
   testDatabaseConnection,
 };
