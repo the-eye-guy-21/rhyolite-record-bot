@@ -176,7 +176,34 @@ async function getSceneList(guildId) {
   return result.rows;
 }
 
+async function attachArchiveMessage(sceneArchive) {
+  const query = `
+    UPDATE scenes
+    SET
+      archive_channel_id = $1,
+      archive_message_id = $2,
+      updated_at = NOW()
+    WHERE thread_id = $3
+    RETURNING *;
+  `;
+
+  const values = [
+    sceneArchive.channelId,
+    sceneArchive.messageId,
+    sceneArchive.threadId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 module.exports = {
+  attachArchiveMessage,
   closeScene,
   createScene,
   getSceneByThreadId,
