@@ -11,6 +11,7 @@ const {
   closeScene,
   createScene,
   getSceneByThreadId,
+  getSceneList,
   initializeDatabase,
   testDatabaseConnection,
 } = require('./database');
@@ -312,6 +313,71 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (subcommand === 'list') {
+    if (!interaction.inGuild()) {
+      await interaction.reply({
+        content: 'Please use `/scene list` inside the Discord server.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    try {
+      const scenes = await getSceneList(
+        interaction.guildId
+      );
+
+      if (scenes.length === 0) {
+        await interaction.editReply({
+          content: 'No scene records have been filed yet.',
+        });
+
+        return;
+      }
+
+      const sceneListEmbed = new EmbedBuilder()
+        .setTitle('Rhyolite Scene Records')
+        .setDescription(
+          'The ten latest scenes, arranged by their in-universe starting dates.'
+        )
+        .setFooter({
+          text: 'The Rhyolite Record',
+        });
+
+      for (const scene of scenes) {
+        sceneListEmbed.addFields({
+          name: `#${scene.id}: ${truncate(scene.title, 80)}`,
+          value: [
+            `**Date:** ${capitalize(scene.start_season)} ${scene.start_day}, Year ${scene.start_year} — ${capitalize(scene.start_daypart)}`,
+            `**Status:** ${capitalize(scene.status)}`,
+            `**Location:** ${truncate(scene.location, 80)}`,
+            `**Characters:** ${truncate(scene.characters, 180)}`,
+            `[Open scene thread](${scene.thread_url})`,
+          ].join('\n'),
+        });
+      }
+
+      await interaction.editReply({
+        embeds: [
+          sceneListEmbed,
+        ],
+      });
+    } catch (error) {
+      console.error('Could not retrieve scene list:', error);
+
+      await interaction.editReply({
+        content: 'The scene list could not be opened. Please ask a moderator to check the Railway logs.',
+      });
+    }
+
+    return;
+  }
+
   if (subcommand === 'close') {
     const channel = interaction.channel;
 
@@ -420,6 +486,14 @@ process.on('SIGTERM', () => {
 
 function capitalize(word) {
   return word.charAt(0).toUpperCase() + word.slice(1);
+}
+
+function truncate(text, maximumLength) {
+  if (text.length <= maximumLength) {
+    return text;
+  }
+
+  return `${text.slice(0, maximumLength - 3)}...`;
 }
 
 client.login(process.env.DISCORD_TOKEN);
