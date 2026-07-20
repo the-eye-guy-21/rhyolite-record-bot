@@ -142,11 +142,77 @@ async function closeScene(scene) {
   return result.rows[0];
 }
 
+async function setCalendarState(calendar) {
+  const query = `
+    INSERT INTO calendar_state (
+      guild_id,
+      current_year,
+      current_season,
+      current_day,
+      current_daypart,
+      updated_by_user_id
+    )
+    VALUES (
+      $1,
+      $2,
+      $3,
+      $4,
+      $5,
+      $6
+    )
+    ON CONFLICT (guild_id)
+    DO UPDATE SET
+      current_year = EXCLUDED.current_year,
+      current_season = EXCLUDED.current_season,
+      current_day = EXCLUDED.current_day,
+      current_daypart = EXCLUDED.current_daypart,
+      updated_by_user_id = EXCLUDED.updated_by_user_id,
+      updated_at = NOW()
+    RETURNING *;
+  `;
+
+  const values = [
+    calendar.guildId,
+    calendar.currentYear,
+    calendar.currentSeason,
+    calendar.currentDay,
+    calendar.currentDaypart,
+    calendar.updatedByUserId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  return result.rows[0];
+}
+
+async function getCalendarState(guildId) {
+  const query = `
+    SELECT *
+    FROM calendar_state
+    WHERE guild_id = $1
+    LIMIT 1;
+  `;
+
+  const values = [
+    guildId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 module.exports = {
   closeScene,
   createScene,
+  getCalendarState,
   getSceneByThreadId,
   initializeDatabase,
   pool,
+  setCalendarState,
   testDatabaseConnection,
 };
