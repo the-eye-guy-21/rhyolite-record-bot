@@ -180,6 +180,26 @@ async function editScene(scene) {
   return result.rows[0];
 }
 
+async function deleteScene(threadId) {
+  const query = `
+    DELETE FROM scenes
+    WHERE thread_id = $1
+    RETURNING *;
+  `;
+
+  const values = [
+    threadId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 async function getSceneList(guildId) {
   const query = `
     SELECT *
@@ -244,6 +264,7 @@ module.exports = {
   attachArchiveMessage,
   closeScene,
   createScene,
+  deleteScene,
   editScene,
   getSceneByThreadId,
   getSceneList,
