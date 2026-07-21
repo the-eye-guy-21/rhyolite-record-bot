@@ -218,6 +218,112 @@ const sceneCommand = new SlashCommandBuilder()
 
   .addSubcommand((subcommand) =>
     subcommand
+      .setName('edit')
+      .setDescription('Correct information in the current scene record.')
+
+      .addStringOption((option) =>
+        option
+          .setName('title')
+          .setDescription('Replace the current scene title.')
+          .setMaxLength(100)
+      )
+
+      .addStringOption((option) =>
+        option
+          .setName('location')
+          .setDescription('Replace the current scene location.')
+          .setMaxLength(100)
+      )
+
+      .addStringOption((option) =>
+        option
+          .setName('characters')
+          .setDescription('Replace the current character list.')
+          .setMaxLength(1000)
+      )
+
+      .addStringOption((option) =>
+        option
+          .setName('premise')
+          .setDescription('Replace the current scene premise.')
+          .setMaxLength(1500)
+      )
+
+      .addIntegerOption((option) =>
+        option
+          .setName('start_year')
+          .setDescription('Replace the starting year.')
+          .setMinValue(1)
+          .setMaxValue(999)
+      )
+
+      .addStringOption((option) =>
+        option
+          .setName('start_season')
+          .setDescription('Replace the starting season.')
+          .addChoices(
+            {
+              name: 'Spring',
+              value: 'spring',
+            },
+            {
+              name: 'Summer',
+              value: 'summer',
+            },
+            {
+              name: 'Fall',
+              value: 'fall',
+            },
+            {
+              name: 'Winter',
+              value: 'winter',
+            }
+          )
+      )
+
+      .addIntegerOption((option) =>
+        option
+          .setName('start_day')
+          .setDescription('Replace the starting day, from 1 to 28.')
+          .setMinValue(1)
+          .setMaxValue(28)
+      )
+
+      .addStringOption((option) =>
+        option
+          .setName('start_daypart')
+          .setDescription('Replace the starting daypart.')
+          .addChoices(
+            {
+              name: 'Morning',
+              value: 'morning',
+            },
+            {
+              name: 'Midmorning',
+              value: 'midmorning',
+            },
+            {
+              name: 'Afternoon',
+              value: 'afternoon',
+            },
+            {
+              name: 'Evening',
+              value: 'evening',
+            },
+            {
+              name: 'Night',
+              value: 'night',
+            },
+            {
+              name: 'Unspecified',
+              value: 'unspecified',
+            }
+          )
+      )
+  )
+
+  .addSubcommand((subcommand) =>
+    subcommand
       .setName('list')
       .setDescription('List the 10 latest scene records.')
   )
