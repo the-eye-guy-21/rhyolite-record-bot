@@ -12,7 +12,9 @@ const {
   closeScene,
   createScene,
   deleteScene,
+  deleteSceneById,
   editScene,
+  getSceneById,
   getSceneByThreadId,
   getSceneList,
   initializeDatabase,
@@ -569,66 +571,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
       return;
     }
 
-    let archiveResult = 'No public archive card was attached.';
+    let archiveResult;
 
-    if (
-      savedScene.archive_channel_id
-      && savedScene.archive_message_id
-    ) {
-      try {
-        const archiveChannel = await client.channels.fetch(
-          savedScene.archive_channel_id
-        );
+    try {
+      archiveResult = await deleteArchiveCard(
+        savedScene
+      );
+    } catch (error) {
+      console.error(
+        'Could not delete public archive card:',
+        error
+      );
 
-        if (
-          !archiveChannel
-          || !archiveChannel.isTextBased()
-          || !archiveChannel.messages
-        ) {
-          await interaction.editReply({
-            content: [
-              'Deletion stopped because the saved archive channel could not be opened.',
-              '',
-              'The PostgreSQL record has not been deleted.',
-            ].join('\n'),
-          });
+      await interaction.editReply({
+        content: [
+          'Deletion stopped because the public archive card could not be removed.',
+          '',
+          'The PostgreSQL record has not been deleted. Please ask a moderator to check the Railway logs.',
+        ].join('\n'),
+      });
 
-          return;
-        }
-
-        const archiveMessage = await archiveChannel.messages.fetch(
-          savedScene.archive_message_id
-        );
-
-        await archiveMessage.delete();
-
-        archiveResult = 'The public archive card was deleted.';
-      } catch (error) {
-        const archiveWasAlreadyMissing =
-          error.code === 10008
-          || error.code === '10008'
-          || error.code === 10003
-          || error.code === '10003';
-
-        if (archiveWasAlreadyMissing) {
-          archiveResult = 'The public archive card was already missing.';
-        } else {
-          console.error(
-            'Could not delete public archive card:',
-            error
-          );
-
-          await interaction.editReply({
-            content: [
-              'Deletion stopped because the public archive card could not be removed.',
-              '',
-              'The PostgreSQL record has not been deleted. Please ask a moderator to check the Railway logs.',
-            ].join('\n'),
-          });
-
-          return;
-        }
-      }
+      return;
     }
 
     let deletedScene;
@@ -675,6 +638,154 @@ client.on(Events.InteractionCreate, async (interaction) => {
         'The original RP thread was not deleted.',
         '',
         '*The clerk has fed the paperwork to a machine with several regrettably exposed gears.*',
+      ].join('\n'),
+    });
+
+    return;
+  }
+
+  if (subcommand === 'delete-file') {
+    const allowed = await requireModerator(
+      interaction
+    );
+
+    if (!allowed) {
+      return;
+    }
+
+    if (!interaction.inGuild()) {
+      await interaction.reply({
+        content: 'Please use `/scene delete-file` inside the Discord server.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    const fileNumber = interaction.options.getInteger(
+      'file_number',
+      true
+    );
+
+    const confirmation = interaction.options.getString(
+      'confirmation',
+      true
+    );
+
+    if (
+      confirmation.trim().toUpperCase()
+      !== 'DELETE'
+    ) {
+      await interaction.reply({
+        content: 'Deletion cancelled. The confirmation field must contain the word `DELETE`.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    let savedScene;
+
+    try {
+      savedScene = await getSceneById(
+        fileNumber,
+        interaction.guildId
+      );
+
+      if (!savedScene) {
+        await interaction.editReply({
+          content: `Incident File #${fileNumber} could not be found in this server.`,
+        });
+
+        return;
+      }
+    } catch (error) {
+      console.error(
+        'Could not retrieve incident file by number:',
+        error
+      );
+
+      await interaction.editReply({
+        content: 'The incident file could not be opened for deletion. Please ask a moderator to check the Railway logs.',
+      });
+
+      return;
+    }
+
+    let archiveResult;
+
+    try {
+      archiveResult = await deleteArchiveCard(
+        savedScene
+      );
+    } catch (error) {
+      console.error(
+        'Could not delete public archive card:',
+        error
+      );
+
+      await interaction.editReply({
+        content: [
+          `Deletion of Incident File #${fileNumber} was stopped because its public archive card could not be removed.`,
+          '',
+          'The PostgreSQL record has not been deleted. Please ask a moderator to check the Railway logs.',
+        ].join('\n'),
+      });
+
+      return;
+    }
+
+    let deletedScene;
+
+    try {
+      deletedScene = await deleteSceneById(
+        fileNumber,
+        interaction.guildId
+      );
+
+      if (!deletedScene) {
+        await interaction.editReply({
+          content: [
+            'The public archive card was handled, but no matching PostgreSQL record could be deleted.',
+            '',
+            'Please ask a moderator to check the Railway logs.',
+          ].join('\n'),
+        });
+
+        return;
+      }
+    } catch (error) {
+      console.error(
+        'Could not delete incident file by number:',
+        error
+      );
+
+      await interaction.editReply({
+        content: [
+          'The public archive card was handled, but the PostgreSQL record could not be deleted.',
+          '',
+          'The incident file may still appear in `/scene list`. Please ask a moderator to check the Railway logs.',
+        ].join('\n'),
+      });
+
+      return;
+    }
+
+    await interaction.editReply({
+      content: [
+        `**Incident File #${deletedScene.id} has been permanently deleted.**`,
+        '',
+        `**Title:** ${deletedScene.title}`,
+        archiveResult,
+        `**Original thread:** ${deletedScene.thread_url}`,
+        '',
+        'The original Discord thread was not deleted.',
+        '',
+        '*The filing cabinet denies ever having contained such a document.*',
       ].join('\n'),
     });
 
@@ -1017,6 +1128,56 @@ process.on('SIGTERM', () => {
   client.destroy();
   process.exit(0);
 });
+
+async function deleteArchiveCard(scene) {
+  if (
+    !scene.archive_channel_id
+    || !scene.archive_message_id
+  ) {
+    return 'No public archive card was attached.';
+  }
+
+  try {
+    const archiveChannel = await client.channels.fetch(
+      scene.archive_channel_id
+    );
+
+    if (
+      !archiveChannel
+      || !archiveChannel.isTextBased()
+      || !archiveChannel.messages
+    ) {
+      throw new Error(
+        'The saved archive channel could not be opened.'
+      );
+    }
+
+    const archiveMessage = await archiveChannel.messages.fetch(
+      scene.archive_message_id
+    );
+
+    await archiveMessage.delete();
+
+    return 'The public archive card was deleted.';
+  } catch (error) {
+    if (isMissingDiscordResource(error)) {
+      return 'The public archive card was already missing.';
+    }
+
+    throw error;
+  }
+}
+
+function isMissingDiscordResource(error) {
+  const errorCode = Number(
+    error?.code
+  );
+
+  return (
+    errorCode === 10008
+    || errorCode === 10003
+  );
+}
 
 function capitalize(word) {
   return word.charAt(0).toUpperCase() + word.slice(1);
