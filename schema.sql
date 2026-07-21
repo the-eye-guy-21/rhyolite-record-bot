@@ -2,9 +2,10 @@ CREATE TABLE IF NOT EXISTS scenes (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
   guild_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL UNIQUE,
+  thread_id TEXT NOT NULL,
   thread_name TEXT NOT NULL,
   thread_url TEXT NOT NULL,
+  starting_message_url TEXT,
 
   archive_channel_id TEXT,
   archive_message_id TEXT UNIQUE,
@@ -104,10 +105,19 @@ CREATE TABLE IF NOT EXISTS scenes (
 );
 
 ALTER TABLE scenes
+DROP CONSTRAINT IF EXISTS scenes_thread_id_key;
+
+ALTER TABLE scenes
+ADD COLUMN IF NOT EXISTS starting_message_url TEXT;
+
+ALTER TABLE scenes
 ADD COLUMN IF NOT EXISTS archive_channel_id TEXT;
 
 ALTER TABLE scenes
 ADD COLUMN IF NOT EXISTS archive_message_id TEXT;
+
+CREATE INDEX IF NOT EXISTS scenes_thread_id_index
+ON scenes (thread_id);
 
 CREATE UNIQUE INDEX IF NOT EXISTS scenes_archive_message_id_unique
 ON scenes (archive_message_id)
