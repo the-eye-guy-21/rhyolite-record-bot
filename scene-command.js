@@ -220,6 +220,12 @@ const sceneCommand = new SlashCommandBuilder()
     subcommand
       .setName('list')
       .setDescription('List the 10 latest scene records.')
+  )
+
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('publish')
+      .setDescription('Publish or repair the public archive card for this scene.')
   );
 
 module.exports = {
