@@ -11,6 +11,7 @@ const {
   attachArchiveMessage,
   closeScene,
   createScene,
+  editScene,
   getSceneByThreadId,
   getSceneList,
   initializeDatabase,
@@ -343,6 +344,146 @@ client.on(Events.InteractionCreate, async (interaction) => {
         content: 'The scene record could not be opened. Please ask a moderator to check the Railway logs.',
       });
     }
+
+    return;
+  }
+
+  if (subcommand === 'edit') {
+    const channel = interaction.channel;
+
+    if (!interaction.inGuild() || !channel || !channel.isThread()) {
+      await interaction.reply({
+        content: 'Please use `/scene edit` inside the RP thread whose record you want to correct.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    const title = interaction.options.getString('title');
+    const location = interaction.options.getString('location');
+    const characters = interaction.options.getString('characters');
+    const premise = interaction.options.getString('premise');
+    const startYear = interaction.options.getInteger('start_year');
+    const startSeason = interaction.options.getString('start_season');
+    const startDay = interaction.options.getInteger('start_day');
+    const startDaypart = interaction.options.getString('start_daypart');
+
+    if (
+      title === null
+      && location === null
+      && characters === null
+      && premise === null
+      && startYear === null
+      && startSeason === null
+      && startDay === null
+      && startDaypart === null
+    ) {
+      await interaction.editReply({
+        content: 'No changes were supplied. Run `/scene edit` again and fill in at least one field.',
+      });
+
+      return;
+    }
+
+    let editedScene;
+
+    try {
+      const existingScene = await getSceneByThreadId(
+        channel.id
+      );
+
+      if (!existingScene) {
+        await interaction.editReply({
+          content: 'This thread does not have a scene record yet. Use `/scene register` first.',
+        });
+
+        return;
+      }
+
+      editedScene = await editScene({
+        threadId: channel.id,
+        title: title,
+        location: location,
+        characters: characters,
+        premise: premise,
+        startYear: startYear,
+        startSeason: startSeason,
+        startDay: startDay,
+        startDaypart: startDaypart,
+      });
+    } catch (error) {
+      console.error('Could not edit scene:', error);
+
+      await interaction.editReply({
+        content: 'The scene record could not be edited. Please ask a moderator to check the Railway logs.',
+      });
+
+      return;
+    }
+
+    let updatedArchiveMessage = null;
+    let archiveUpdateFailed = false;
+    let archiveWasMissing = false;
+
+    if (
+      editedScene.archive_channel_id
+      && editedScene.archive_message_id
+    ) {
+      try {
+        updatedArchiveMessage = await updateSceneArchive(
+          client,
+          editedScene
+        );
+      } catch (error) {
+        archiveUpdateFailed = true;
+
+        console.error(
+          'Scene edited, but archive update failed:',
+          error
+        );
+      }
+    } else {
+      archiveWasMissing = true;
+    }
+
+    const confirmationLines = [
+      `**Incident File #${editedScene.id} has been updated.**`,
+      '',
+      `**Title:** ${editedScene.title}`,
+      `**Location:** ${editedScene.location}`,
+      `**Characters:** ${editedScene.characters}`,
+      `**Starting date:** ${capitalize(editedScene.start_season)} ${editedScene.start_day}, Year ${editedScene.start_year} — ${capitalize(editedScene.start_daypart)}`,
+    ];
+
+    if (updatedArchiveMessage) {
+      confirmationLines.push(
+        '',
+        `**Public record updated:** ${updatedArchiveMessage.url}`
+      );
+    }
+
+    if (archiveUpdateFailed) {
+      confirmationLines.push(
+        '',
+        'The database record was updated, but the public archive card could not be refreshed. Use `/scene publish` to repair it.'
+      );
+    }
+
+    if (archiveWasMissing) {
+      confirmationLines.push(
+        '',
+        'This scene does not have a public archive card yet. Use `/scene publish` to create one.'
+      );
+    }
+
+    await interaction.editReply({
+      content: confirmationLines.join('\n'),
+    });
 
     return;
   }
