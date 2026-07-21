@@ -24,6 +24,10 @@ const {
 } = require('./archive');
 
 const {
+  requireModerator,
+} = require('./permissions');
+
+const {
   sceneCommand,
 } = require('./scene-command');
 
@@ -349,6 +353,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (subcommand === 'edit') {
+    const allowed = await requireModerator(
+      interaction
+    );
+
+    if (!allowed) {
+      return;
+    }
+
     const channel = interaction.channel;
 
     if (!interaction.inGuild() || !channel || !channel.isThread()) {
@@ -554,6 +566,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (subcommand === 'publish') {
+    const allowed = await requireModerator(
+      interaction
+    );
+
+    if (!allowed) {
+      return;
+    }
+
     const channel = interaction.channel;
 
     if (!interaction.inGuild() || !channel || !channel.isThread()) {
@@ -647,6 +667,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 
   if (subcommand === 'close') {
+    const allowed = await requireModerator(
+      interaction
+    );
+
+    if (!allowed) {
+      return;
+    }
+
     const channel = interaction.channel;
 
     if (!interaction.inGuild() || !channel || !channel.isThread()) {
