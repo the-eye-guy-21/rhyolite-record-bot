@@ -152,6 +152,24 @@ async function getScenesByThreadId(threadId) {
   return result.rows;
 }
 
+async function getOnlySceneByThreadId(threadId) {
+  const scenes = await getScenesByThreadId(
+    threadId
+  );
+
+  if (scenes.length === 0) {
+    return null;
+  }
+
+  if (scenes.length > 1) {
+    throw createAmbiguousSceneError(
+      threadId
+    );
+  }
+
+  return scenes[0];
+}
+
 async function getSceneById(sceneId, guildId) {
   const query = `
     SELECT *
@@ -176,6 +194,27 @@ async function getSceneById(sceneId, guildId) {
 }
 
 async function closeScene(scene) {
+  const existingScene =
+    await getOnlySceneByThreadId(
+      scene.threadId
+    );
+
+  if (!existingScene) {
+    return null;
+  }
+
+  return closeSceneById({
+    sceneId: existingScene.id,
+    guildId: existingScene.guild_id,
+    finalSummary: scene.finalSummary,
+    endYear: scene.endYear,
+    endSeason: scene.endSeason,
+    endDay: scene.endDay,
+    endDaypart: scene.endDaypart,
+  });
+}
+
+async function closeSceneById(scene) {
   const query = `
     UPDATE scenes
     SET
@@ -186,7 +225,8 @@ async function closeScene(scene) {
       end_daypart = $5,
       status = 'completed',
       updated_at = NOW()
-    WHERE thread_id = $6
+    WHERE id = $6
+      AND guild_id = $7
     RETURNING *;
   `;
 
@@ -196,7 +236,8 @@ async function closeScene(scene) {
     scene.endSeason,
     scene.endDay,
     scene.endDaypart,
-    scene.threadId,
+    scene.sceneId,
+    scene.guildId,
   ];
 
   const result = await pool.query(query, values);
@@ -209,6 +250,32 @@ async function closeScene(scene) {
 }
 
 async function editScene(scene) {
+  const existingScene =
+    await getOnlySceneByThreadId(
+      scene.threadId
+    );
+
+  if (!existingScene) {
+    return null;
+  }
+
+  return editSceneById({
+    sceneId: existingScene.id,
+    guildId: existingScene.guild_id,
+    title: scene.title,
+    location: scene.location,
+    characters: scene.characters,
+    premise: scene.premise,
+    startYear: scene.startYear,
+    startSeason: scene.startSeason,
+    startDay: scene.startDay,
+    startDaypart: scene.startDaypart,
+    startingMessageUrl:
+      scene.startingMessageUrl,
+  });
+}
+
+async function editSceneById(scene) {
   const query = `
     UPDATE scenes
     SET
@@ -220,21 +287,28 @@ async function editScene(scene) {
       start_season = COALESCE($6::text, start_season),
       start_day = COALESCE($7::integer, start_day),
       start_daypart = COALESCE($8::text, start_daypart),
+      starting_message_url = COALESCE(
+        $9::text,
+        starting_message_url
+      ),
       updated_at = NOW()
-    WHERE thread_id = $9
+    WHERE id = $10
+      AND guild_id = $11
     RETURNING *;
   `;
 
   const values = [
-    scene.title,
-    scene.location,
-    scene.characters,
-    scene.premise,
-    scene.startYear,
-    scene.startSeason,
-    scene.startDay,
-    scene.startDaypart,
-    scene.threadId,
+    scene.title ?? null,
+    scene.location ?? null,
+    scene.characters ?? null,
+    scene.premise ?? null,
+    scene.startYear ?? null,
+    scene.startSeason ?? null,
+    scene.startDay ?? null,
+    scene.startDaypart ?? null,
+    scene.startingMessageUrl ?? null,
+    scene.sceneId,
+    scene.guildId,
   ];
 
   const result = await pool.query(query, values);
@@ -247,23 +321,19 @@ async function editScene(scene) {
 }
 
 async function deleteScene(threadId) {
-  const query = `
-    DELETE FROM scenes
-    WHERE thread_id = $1
-    RETURNING *;
-  `;
+  const existingScene =
+    await getOnlySceneByThreadId(
+      threadId
+    );
 
-  const values = [
-    threadId,
-  ];
-
-  const result = await pool.query(query, values);
-
-  if (result.rows.length === 0) {
+  if (!existingScene) {
     return null;
   }
 
-  return result.rows[0];
+  return deleteSceneById(
+    existingScene.id,
+    existingScene.guild_id
+  );
 }
 
 async function deleteSceneById(sceneId, guildId) {
@@ -373,7 +443,38 @@ async function searchScenes(
   return result.rows;
 }
 
-async function attachArchiveMessage(sceneArchive) {
+async function attachArchiveMessage(
+  sceneArchive
+) {
+  let sceneId =
+    sceneArchive.sceneId || null;
+
+  /*
+   * This fallback keeps the current version of
+   * index.js working until the next replacement.
+   * It is only allowed when the thread contains
+   * exactly one incident file.
+   */
+  if (
+    !sceneId
+    && sceneArchive.threadId
+  ) {
+    const existingScene =
+      await getOnlySceneByThreadId(
+        sceneArchive.threadId
+      );
+
+    if (!existingScene) {
+      return null;
+    }
+
+    sceneId = existingScene.id;
+  }
+
+  if (!sceneId) {
+    return null;
+  }
+
   const query = `
     UPDATE scenes
     SET
@@ -387,7 +488,7 @@ async function attachArchiveMessage(sceneArchive) {
   const values = [
     sceneArchive.channelId,
     sceneArchive.messageId,
-    sceneArchive.sceneId,
+    sceneId,
   ];
 
   const result = await pool.query(query, values);
@@ -399,14 +500,30 @@ async function attachArchiveMessage(sceneArchive) {
   return result.rows[0];
 }
 
+function createAmbiguousSceneError(
+  threadId
+) {
+  const error = new Error(
+    'This thread contains multiple incident files. A file number is required.'
+  );
+
+  error.code = 'AMBIGUOUS_SCENE';
+  error.threadId = threadId;
+
+  return error;
+}
+
 module.exports = {
   attachArchiveMessage,
   closeScene,
+  closeSceneById,
   createAdditionalScene,
   createScene,
   deleteScene,
   deleteSceneById,
   editScene,
+  editSceneById,
+  getOnlySceneByThreadId,
   getSceneById,
   getSceneByThreadId,
   getSceneList,
