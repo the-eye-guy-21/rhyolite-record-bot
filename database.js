@@ -33,12 +33,35 @@ async function testDatabaseConnection() {
 }
 
 async function createScene(scene) {
+  const existingScene = await getSceneByThreadId(
+    scene.threadId
+  );
+
+  if (existingScene) {
+    const error = new Error(
+      'This thread already has a scene record.'
+    );
+
+    error.code = '23505';
+
+    throw error;
+  }
+
+  return insertScene(scene);
+}
+
+async function createAdditionalScene(scene) {
+  return insertScene(scene);
+}
+
+async function insertScene(scene) {
   const query = `
     INSERT INTO scenes (
       guild_id,
       thread_id,
       thread_name,
       thread_url,
+      starting_message_url,
       title,
       location,
       characters,
@@ -62,7 +85,8 @@ async function createScene(scene) {
       $10,
       $11,
       $12,
-      $13
+      $13,
+      $14
     )
     RETURNING *;
   `;
@@ -72,6 +96,7 @@ async function createScene(scene) {
     scene.threadId,
     scene.threadName,
     scene.threadUrl,
+    scene.startingMessageUrl || null,
     scene.title,
     scene.location,
     scene.characters,
@@ -93,6 +118,7 @@ async function getSceneByThreadId(threadId) {
     SELECT *
     FROM scenes
     WHERE thread_id = $1
+    ORDER BY id ASC
     LIMIT 1;
   `;
 
@@ -107,6 +133,23 @@ async function getSceneByThreadId(threadId) {
   }
 
   return result.rows[0];
+}
+
+async function getScenesByThreadId(threadId) {
+  const query = `
+    SELECT *
+    FROM scenes
+    WHERE thread_id = $1
+    ORDER BY id ASC;
+  `;
+
+  const values = [
+    threadId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  return result.rows;
 }
 
 async function getSceneById(sceneId, guildId) {
@@ -279,6 +322,57 @@ async function getSceneList(guildId) {
   return result.rows;
 }
 
+async function searchScenes(
+  guildId,
+  searchTerm,
+  status
+) {
+  const query = `
+    SELECT *
+    FROM scenes
+    WHERE guild_id = $1
+      AND (
+        title ILIKE '%' || $2 || '%'
+        OR location ILIKE '%' || $2 || '%'
+        OR characters ILIKE '%' || $2 || '%'
+        OR premise ILIKE '%' || $2 || '%'
+        OR COALESCE(final_summary, '') ILIKE '%' || $2 || '%'
+      )
+      AND (
+        $3::text IS NULL
+        OR status = $3
+      )
+    ORDER BY
+      start_year DESC,
+      CASE start_season
+        WHEN 'winter' THEN 4
+        WHEN 'fall' THEN 3
+        WHEN 'summer' THEN 2
+        WHEN 'spring' THEN 1
+      END DESC,
+      start_day DESC,
+      CASE start_daypart
+        WHEN 'night' THEN 5
+        WHEN 'evening' THEN 4
+        WHEN 'afternoon' THEN 3
+        WHEN 'midmorning' THEN 2
+        WHEN 'morning' THEN 1
+        ELSE 0
+      END DESC
+    LIMIT 10;
+  `;
+
+  const values = [
+    guildId,
+    searchTerm,
+    status,
+  ];
+
+  const result = await pool.query(query, values);
+
+  return result.rows;
+}
+
 async function attachArchiveMessage(sceneArchive) {
   const query = `
     UPDATE scenes
@@ -286,14 +380,14 @@ async function attachArchiveMessage(sceneArchive) {
       archive_channel_id = $1,
       archive_message_id = $2,
       updated_at = NOW()
-    WHERE thread_id = $3
+    WHERE id = $3
     RETURNING *;
   `;
 
   const values = [
     sceneArchive.channelId,
     sceneArchive.messageId,
-    sceneArchive.threadId,
+    sceneArchive.sceneId,
   ];
 
   const result = await pool.query(query, values);
@@ -308,6 +402,7 @@ async function attachArchiveMessage(sceneArchive) {
 module.exports = {
   attachArchiveMessage,
   closeScene,
+  createAdditionalScene,
   createScene,
   deleteScene,
   deleteSceneById,
@@ -315,7 +410,9 @@ module.exports = {
   getSceneById,
   getSceneByThreadId,
   getSceneList,
+  getScenesByThreadId,
   initializeDatabase,
   pool,
+  searchScenes,
   testDatabaseConnection,
 };
