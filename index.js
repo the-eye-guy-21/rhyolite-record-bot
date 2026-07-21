@@ -19,6 +19,7 @@ const {
 
 const {
   publishSceneArchive,
+  updateSceneArchive,
 } = require('./archive');
 
 const {
@@ -452,6 +453,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
       true
     );
 
+    let completedScene;
+
     try {
       const existingScene = await getSceneByThreadId(
         channel.id
@@ -473,7 +476,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         return;
       }
 
-      const completedScene = await closeScene({
+      completedScene = await closeScene({
         threadId: channel.id,
         finalSummary: finalSummary,
         endYear: endYear,
@@ -481,29 +484,84 @@ client.on(Events.InteractionCreate, async (interaction) => {
         endDay: endDay,
         endDaypart: endDaypart,
       });
-
-      await interaction.editReply({
-        content: [
-          `**Incident File #${completedScene.id} has been closed.**`,
-          '',
-          `**Title:** ${completedScene.title}`,
-          `**Status:** ${capitalize(completedScene.status)}`,
-          `**Ending date:** ${capitalize(completedScene.end_season)} ${completedScene.end_day}, Year ${completedScene.end_year}`,
-          `**Daypart:** ${capitalize(completedScene.end_daypart)}`,
-          '',
-          '**Final Summary**',
-          completedScene.final_summary,
-          '',
-          '*The record has been filed. The timeline remains somebody else’s problem.*',
-        ].join('\n'),
-      });
     } catch (error) {
       console.error('Could not close scene:', error);
 
       await interaction.editReply({
         content: 'The scene could not be completed. Please ask a moderator to check the Railway logs.',
       });
+
+      return;
     }
+
+    let updatedArchiveMessage = null;
+    let archiveUpdateFailed = false;
+    let archiveWasMissing = false;
+
+    if (
+      completedScene.archive_channel_id
+      && completedScene.archive_message_id
+    ) {
+      try {
+        updatedArchiveMessage = await updateSceneArchive(
+          client,
+          completedScene
+        );
+      } catch (error) {
+        archiveUpdateFailed = true;
+
+        console.error(
+          'Scene closed, but archive update failed:',
+          error
+        );
+      }
+    } else {
+      archiveWasMissing = true;
+    }
+
+    const confirmationLines = [
+      `**Incident File #${completedScene.id} has been closed.**`,
+      '',
+      `**Title:** ${completedScene.title}`,
+      `**Status:** ${capitalize(completedScene.status)}`,
+      `**Ending date:** ${capitalize(completedScene.end_season)} ${completedScene.end_day}, Year ${completedScene.end_year}`,
+      `**Daypart:** ${capitalize(completedScene.end_daypart)}`,
+      '',
+      '**Final Summary**',
+      completedScene.final_summary,
+    ];
+
+    if (updatedArchiveMessage) {
+      confirmationLines.push(
+        '',
+        `**Public record updated:** ${updatedArchiveMessage.url}`
+      );
+    }
+
+    if (archiveUpdateFailed) {
+      confirmationLines.push(
+        '',
+        'The scene was closed successfully, but its public archive card could not be updated. Please ask a moderator to check the Railway logs.'
+      );
+    }
+
+    if (archiveWasMissing) {
+      confirmationLines.push(
+        '',
+        'The scene was closed successfully, but it does not have a saved public archive card yet.'
+      );
+    }
+
+    confirmationLines.push(
+      '',
+      '*The record has been filed. The timeline remains somebody else’s problem.*'
+    );
+
+    await interaction.editReply({
+      content: confirmationLines.join('\n'),
+    });
+
+    return;
   }
 });
 
