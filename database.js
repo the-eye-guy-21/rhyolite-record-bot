@@ -142,6 +142,44 @@ async function closeScene(scene) {
   return result.rows[0];
 }
 
+async function editScene(scene) {
+  const query = `
+    UPDATE scenes
+    SET
+      title = COALESCE($1::text, title),
+      location = COALESCE($2::text, location),
+      characters = COALESCE($3::text, characters),
+      premise = COALESCE($4::text, premise),
+      start_year = COALESCE($5::integer, start_year),
+      start_season = COALESCE($6::text, start_season),
+      start_day = COALESCE($7::integer, start_day),
+      start_daypart = COALESCE($8::text, start_daypart),
+      updated_at = NOW()
+    WHERE thread_id = $9
+    RETURNING *;
+  `;
+
+  const values = [
+    scene.title,
+    scene.location,
+    scene.characters,
+    scene.premise,
+    scene.startYear,
+    scene.startSeason,
+    scene.startDay,
+    scene.startDaypart,
+    scene.threadId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 async function getSceneList(guildId) {
   const query = `
     SELECT *
@@ -206,6 +244,7 @@ module.exports = {
   attachArchiveMessage,
   closeScene,
   createScene,
+  editScene,
   getSceneByThreadId,
   getSceneList,
   initializeDatabase,
