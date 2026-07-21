@@ -109,6 +109,29 @@ async function getSceneByThreadId(threadId) {
   return result.rows[0];
 }
 
+async function getSceneById(sceneId, guildId) {
+  const query = `
+    SELECT *
+    FROM scenes
+    WHERE id = $1
+      AND guild_id = $2
+    LIMIT 1;
+  `;
+
+  const values = [
+    sceneId,
+    guildId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 async function closeScene(scene) {
   const query = `
     UPDATE scenes
@@ -200,6 +223,28 @@ async function deleteScene(threadId) {
   return result.rows[0];
 }
 
+async function deleteSceneById(sceneId, guildId) {
+  const query = `
+    DELETE FROM scenes
+    WHERE id = $1
+      AND guild_id = $2
+    RETURNING *;
+  `;
+
+  const values = [
+    sceneId,
+    guildId,
+  ];
+
+  const result = await pool.query(query, values);
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 async function getSceneList(guildId) {
   const query = `
     SELECT *
@@ -265,7 +310,9 @@ module.exports = {
   closeScene,
   createScene,
   deleteScene,
+  deleteSceneById,
   editScene,
+  getSceneById,
   getSceneByThreadId,
   getSceneList,
   initializeDatabase,
