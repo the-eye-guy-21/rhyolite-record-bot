@@ -3,23 +3,10 @@ const {
 } = require('discord.js');
 
 async function publishSceneArchive(client, scene) {
-  const archiveChannelId = process.env.ARCHIVE_CHANNEL_ID;
-
-  if (!archiveChannelId) {
-    throw new Error(
-      'Missing the ARCHIVE_CHANNEL_ID environment variable.'
-    );
-  }
-
-  const archiveChannel = await client.channels.fetch(
-    archiveChannelId
+  const archiveChannel = await getArchiveChannel(
+    client,
+    process.env.ARCHIVE_CHANNEL_ID
   );
-
-  if (!archiveChannel || !archiveChannel.isSendable()) {
-    throw new Error(
-      'The archive channel could not be found or cannot receive messages.'
-    );
-  }
 
   const archiveEmbed = buildSceneArchiveEmbed(scene);
 
@@ -32,13 +19,85 @@ async function publishSceneArchive(client, scene) {
   return archiveMessage;
 }
 
+async function updateSceneArchive(client, scene) {
+  if (
+    !scene.archive_channel_id
+    || !scene.archive_message_id
+  ) {
+    throw new Error(
+      'This scene does not have a saved archive message.'
+    );
+  }
+
+  const archiveChannel = await getArchiveChannel(
+    client,
+    scene.archive_channel_id
+  );
+
+  const archiveMessage = await archiveChannel.messages.fetch(
+    scene.archive_message_id
+  );
+
+  const archiveEmbed = buildSceneArchiveEmbed(scene);
+
+  const updatedMessage = await archiveMessage.edit({
+    embeds: [
+      archiveEmbed,
+    ],
+  });
+
+  return updatedMessage;
+}
+
+async function getArchiveChannel(client, channelId) {
+  if (!channelId) {
+    throw new Error(
+      'Missing the ARCHIVE_CHANNEL_ID environment variable.'
+    );
+  }
+
+  const archiveChannel = await client.channels.fetch(
+    channelId
+  );
+
+  if (
+    !archiveChannel
+    || !archiveChannel.isSendable()
+    || !archiveChannel.isTextBased()
+  ) {
+    throw new Error(
+      'The archive channel could not be found or cannot receive messages.'
+    );
+  }
+
+  return archiveChannel;
+}
+
 function buildSceneArchiveEmbed(scene) {
+  const descriptionLines = [
+    '**Premise**',
+    scene.premise,
+  ];
+
+  if (
+    scene.status === 'completed'
+    && scene.final_summary
+  ) {
+    descriptionLines.push(
+      '',
+      '**Final Summary**',
+      scene.final_summary
+    );
+  }
+
   const archiveEmbed = new EmbedBuilder()
     .setTitle(
       `Incident File #${scene.id}: ${scene.title}`
     )
     .setURL(scene.thread_url)
-    .setDescription(scene.premise)
+    .setDescription(
+      descriptionLines.join('\n')
+    )
     .addFields(
       {
         name: 'Location',
@@ -65,13 +124,40 @@ function buildSceneArchiveEmbed(scene) {
         name: 'Original Scene',
         value: `[Open the RP thread](${scene.thread_url})`,
       }
-    )
-    .setFooter({
-      text: 'The Rhyolite Record • Ongoing Scene',
-    })
-    .setTimestamp(
-      new Date(scene.created_at)
     );
+
+  if (
+    scene.status === 'completed'
+    && scene.end_year
+  ) {
+    archiveEmbed.addFields({
+      name: 'Ending Date',
+      value: formatSceneDate(
+        scene.end_year,
+        scene.end_season,
+        scene.end_day,
+        scene.end_daypart
+      ),
+    });
+  }
+
+  if (scene.status === 'completed') {
+    archiveEmbed
+      .setFooter({
+        text: 'The Rhyolite Record • Completed Scene',
+      })
+      .setTimestamp(
+        new Date(scene.updated_at)
+      );
+  } else {
+    archiveEmbed
+      .setFooter({
+        text: 'The Rhyolite Record • Ongoing Scene',
+      })
+      .setTimestamp(
+        new Date(scene.created_at)
+      );
+  }
 
   return archiveEmbed;
 }
@@ -92,4 +178,5 @@ function capitalize(word) {
 module.exports = {
   buildSceneArchiveEmbed,
   publishSceneArchive,
+  updateSceneArchive,
 };
