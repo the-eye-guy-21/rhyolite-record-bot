@@ -412,6 +412,99 @@ client.on(Events.InteractionCreate, async (interaction) => {
     return;
   }
 
+  if (subcommand === 'publish') {
+    const channel = interaction.channel;
+
+    if (!interaction.inGuild() || !channel || !channel.isThread()) {
+      await interaction.reply({
+        content: 'Please use `/scene publish` inside the RP thread whose archive card you want to publish or repair.',
+        flags: MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    await interaction.deferReply({
+      flags: MessageFlags.Ephemeral,
+    });
+
+    try {
+      const savedScene = await getSceneByThreadId(
+        channel.id
+      );
+
+      if (!savedScene) {
+        await interaction.editReply({
+          content: 'This thread does not have a scene record yet. Use `/scene register` first.',
+        });
+
+        return;
+      }
+
+      if (
+        savedScene.archive_channel_id
+        && savedScene.archive_message_id
+      ) {
+        try {
+          const updatedArchiveMessage = await updateSceneArchive(
+            client,
+            savedScene
+          );
+
+          await interaction.editReply({
+            content: [
+              `**Incident File #${savedScene.id} has been refreshed.**`,
+              '',
+              `**Public record:** ${updatedArchiveMessage.url}`,
+              '',
+              'The existing archive card was updated with the latest saved information.',
+            ].join('\n'),
+          });
+
+          return;
+        } catch (error) {
+          console.error(
+            'The existing archive card could not be refreshed. Attempting to create a replacement:',
+            error
+          );
+        }
+      }
+
+      const archiveMessage = await publishSceneArchive(
+        client,
+        savedScene
+      );
+
+      await attachArchiveMessage({
+        channelId: archiveMessage.channelId,
+        messageId: archiveMessage.id,
+        threadId: channel.id,
+      });
+
+      await interaction.editReply({
+        content: [
+          `**Incident File #${savedScene.id} has been published.**`,
+          '',
+          `**Status:** ${capitalize(savedScene.status)}`,
+          `**Public record:** ${archiveMessage.url}`,
+          '',
+          'The archive card has been attached to this scene record.',
+        ].join('\n'),
+      });
+    } catch (error) {
+      console.error(
+        'Could not publish or repair scene archive:',
+        error
+      );
+
+      await interaction.editReply({
+        content: 'The public archive card could not be published or repaired. Please ask a moderator to check the Railway logs.',
+      });
+    }
+
+    return;
+  }
+
   if (subcommand === 'close') {
     const channel = interaction.channel;
 
@@ -548,7 +641,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     if (archiveWasMissing) {
       confirmationLines.push(
         '',
-        'The scene was closed successfully, but it does not have a saved public archive card yet.'
+        'The scene was closed successfully, but it does not have a saved public archive card yet. Use `/scene publish` to create one.'
       );
     }
 
