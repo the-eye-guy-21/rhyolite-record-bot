@@ -324,6 +324,21 @@ const sceneCommand = new SlashCommandBuilder()
 
   .addSubcommand((subcommand) =>
     subcommand
+      .setName('delete')
+      .setDescription('Permanently delete the current incident file.')
+
+      .addStringOption((option) =>
+        option
+          .setName('confirmation')
+          .setDescription('Type DELETE to confirm permanent deletion.')
+          .setMinLength(6)
+          .setMaxLength(6)
+          .setRequired(true)
+      )
+  )
+
+  .addSubcommand((subcommand) =>
+    subcommand
       .setName('list')
       .setDescription('List the 10 latest scene records.')
   )
