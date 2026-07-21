@@ -244,13 +244,20 @@ const sceneCommand = new SlashCommandBuilder()
   .addSubcommand((subcommand) =>
     subcommand
       .setName('view')
-      .setDescription('View the scene record for the current thread.')
+      .setDescription('View scene records belonging to the current thread.')
+
+      .addIntegerOption((option) =>
+        option
+          .setName('file_number')
+          .setDescription('Optional incident-file number to view.')
+          .setMinValue(1)
+      )
   )
 
   .addSubcommand((subcommand) =>
     subcommand
       .setName('close')
-      .setDescription('Complete the scene record for the current thread.')
+      .setDescription('Complete a scene record in the current thread.')
 
       .addStringOption((option) =>
         option
@@ -335,12 +342,26 @@ const sceneCommand = new SlashCommandBuilder()
           )
           .setRequired(true)
       )
+
+      .addIntegerOption((option) =>
+        option
+          .setName('file_number')
+          .setDescription('Required when this thread has multiple files.')
+          .setMinValue(1)
+      )
   )
 
   .addSubcommand((subcommand) =>
     subcommand
       .setName('edit')
-      .setDescription('Correct information in the current scene record.')
+      .setDescription('Correct information in a scene record.')
+
+      .addIntegerOption((option) =>
+        option
+          .setName('file_number')
+          .setDescription('Required when this thread has multiple files.')
+          .setMinValue(1)
+      )
 
       .addStringOption((option) =>
         option
@@ -441,12 +462,19 @@ const sceneCommand = new SlashCommandBuilder()
             }
           )
       )
+
+      .addStringOption((option) =>
+        option
+          .setName('starting_message')
+          .setDescription('Replace the link to the scene’s first message.')
+          .setMaxLength(500)
+      )
   )
 
   .addSubcommand((subcommand) =>
     subcommand
       .setName('delete')
-      .setDescription('Permanently delete the current incident file.')
+      .setDescription('Permanently delete a file in the current thread.')
 
       .addStringOption((option) =>
         option
@@ -455,6 +483,13 @@ const sceneCommand = new SlashCommandBuilder()
           .setMinLength(6)
           .setMaxLength(6)
           .setRequired(true)
+      )
+
+      .addIntegerOption((option) =>
+        option
+          .setName('file_number')
+          .setDescription('Required when this thread has multiple files.')
+          .setMinValue(1)
       )
   )
 
@@ -490,7 +525,14 @@ const sceneCommand = new SlashCommandBuilder()
   .addSubcommand((subcommand) =>
     subcommand
       .setName('publish')
-      .setDescription('Publish or repair the public archive card for this scene.')
+      .setDescription('Publish or repair a public archive card.')
+
+      .addIntegerOption((option) =>
+        option
+          .setName('file_number')
+          .setDescription('Required when this thread has multiple files.')
+          .setMinValue(1)
+      )
   );
 
 module.exports = {
