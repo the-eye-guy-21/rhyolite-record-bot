@@ -34,14 +34,27 @@ const {
   sceneCommand,
 } = require('./scene-command');
 
+const {
+  plotCommand,
+} = require('./plot-command');
+
+const {
+  handlePlotCommand,
+} = require('./plot-handler');
+
 if (!process.env.DISCORD_TOKEN) {
-  console.error('Missing the DISCORD_TOKEN environment variable.');
+  console.error(
+    'Missing the DISCORD_TOKEN environment variable.'
+  );
+
   process.exit(1);
 }
 
 const pingCommand = new SlashCommandBuilder()
   .setName('ping')
-  .setDescription('Check whether The Rhyolite Record is responding.');
+  .setDescription(
+    'Check whether The Rhyolite Record is responding.'
+  );
 
 const protectedSceneCommands = new Set([
   'register-additional',
@@ -58,223 +71,393 @@ const client = new Client({
   ],
 });
 
-client.once(Events.ClientReady, async (readyClient) => {
-  console.log(`The Rhyolite Record is online as ${readyClient.user.tag}.`);
-
-  try {
-    await initializeDatabase();
-
-    const databaseTime = await testDatabaseConnection();
-
+client.once(
+  Events.ClientReady,
+  async (readyClient) => {
     console.log(
-      `PostgreSQL connected successfully. Database time: ${databaseTime}`
+      `The Rhyolite Record is online as ${readyClient.user.tag}.`
     );
-  } catch (error) {
-    console.error('Could not initialize PostgreSQL:', error);
-  }
 
-  const commands = [
-    pingCommand.toJSON(),
-    sceneCommand.toJSON(),
-  ];
-
-  for (const guild of readyClient.guilds.cache.values()) {
     try {
-      await guild.commands.set(commands);
+      await initializeDatabase();
+
+      const databaseTime =
+        await testDatabaseConnection();
 
       console.log(
-        `Registered /ping and /scene in ${guild.name}.`
+        `PostgreSQL connected successfully. Database time: ${databaseTime}`
       );
     } catch (error) {
       console.error(
-        `Could not register commands in ${guild.name}:`,
+        'Could not initialize PostgreSQL:',
         error
       );
     }
+
+    const commands = [
+      pingCommand.toJSON(),
+      sceneCommand.toJSON(),
+      plotCommand.toJSON(),
+    ];
+
+    for (
+      const guild
+      of readyClient.guilds.cache.values()
+    ) {
+      try {
+        await guild.commands.set(
+          commands
+        );
+
+        console.log(
+          `Registered /ping, /scene, and /plot in ${guild.name}.`
+        );
+      } catch (error) {
+        console.error(
+          `Could not register commands in ${guild.name}:`,
+          error
+        );
+      }
+    }
   }
-});
+);
 
-client.on(Events.InteractionCreate, async (interaction) => {
-  if (!interaction.isChatInputCommand()) {
-    return;
-  }
-
-  if (interaction.commandName === 'ping') {
-    await interaction.reply({
-      content: 'The Rhyolite Record is connected and responding.',
-      flags: MessageFlags.Ephemeral,
-    });
-
-    return;
-  }
-
-  if (interaction.commandName !== 'scene') {
-    return;
-  }
-
-  const subcommand = interaction.options.getSubcommand();
-
-  if (protectedSceneCommands.has(subcommand)) {
-    const allowed = await requireModerator(
-      interaction
-    );
-
-    if (!allowed) {
+client.on(
+  Events.InteractionCreate,
+  async (interaction) => {
+    if (!interaction.isChatInputCommand()) {
       return;
     }
-  }
 
-  try {
-    switch (subcommand) {
-      case 'register':
-        await handleRegister(interaction, false);
-        break;
-
-      case 'register-additional':
-        await handleRegister(interaction, true);
-        break;
-
-      case 'view':
-        await handleView(interaction);
-        break;
-
-      case 'edit':
-        await handleEdit(interaction);
-        break;
-
-      case 'delete':
-        await handleDeleteInThread(interaction);
-        break;
-
-      case 'delete-file':
-        await handleDeleteByNumber(interaction);
-        break;
-
-      case 'list':
-        await handleList(interaction);
-        break;
-
-      case 'publish':
-        await handlePublish(interaction);
-        break;
-
-      case 'close':
-        await handleClose(interaction);
-        break;
-
-      default:
-        await interaction.reply({
-          content: 'That scene command is not available.',
-          flags: MessageFlags.Ephemeral,
-        });
-    }
-  } catch (error) {
-    console.error(
-      `Unexpected error while handling /scene ${subcommand}:`,
-      error
-    );
-
-    const errorMessage =
-      'The command could not be completed. Please ask a moderator to check the Railway logs.';
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply({
-        content: errorMessage,
-        embeds: [],
-      }).catch(() => {});
-    } else {
+    if (interaction.commandName === 'ping') {
       await interaction.reply({
-        content: errorMessage,
-        flags: MessageFlags.Ephemeral,
-      }).catch(() => {});
+        content:
+          'The Rhyolite Record is connected and responding.',
+
+        flags:
+          MessageFlags.Ephemeral,
+      });
+
+      return;
+    }
+
+    if (interaction.commandName === 'plot') {
+      try {
+        await handlePlotCommand(
+          interaction,
+          client
+        );
+      } catch (error) {
+        console.error(
+          'Unexpected error while handling /plot:',
+          error
+        );
+
+        const errorMessage =
+          'The Chronicle Entry command could not be completed. Please ask a moderator to check the Railway logs.';
+
+        if (
+          interaction.deferred
+          || interaction.replied
+        ) {
+          await interaction.editReply({
+            content: errorMessage,
+            embeds: [],
+          }).catch(() => {});
+        } else {
+          await interaction.reply({
+            content: errorMessage,
+            flags:
+              MessageFlags.Ephemeral,
+          }).catch(() => {});
+        }
+      }
+
+      return;
+    }
+
+    if (
+      interaction.commandName
+      !== 'scene'
+    ) {
+      return;
+    }
+
+    const subcommand =
+      interaction.options.getSubcommand();
+
+    if (
+      protectedSceneCommands.has(
+        subcommand
+      )
+    ) {
+      const allowed =
+        await requireModerator(
+          interaction
+        );
+
+      if (!allowed) {
+        return;
+      }
+    }
+
+    try {
+      switch (subcommand) {
+        case 'register':
+          await handleRegister(
+            interaction,
+            false
+          );
+          break;
+
+        case 'register-additional':
+          await handleRegister(
+            interaction,
+            true
+          );
+          break;
+
+        case 'view':
+          await handleView(
+            interaction
+          );
+          break;
+
+        case 'edit':
+          await handleEdit(
+            interaction
+          );
+          break;
+
+        case 'delete':
+          await handleDeleteInThread(
+            interaction
+          );
+          break;
+
+        case 'delete-file':
+          await handleDeleteByNumber(
+            interaction
+          );
+          break;
+
+        case 'list':
+          await handleList(
+            interaction
+          );
+          break;
+
+        case 'publish':
+          await handlePublish(
+            interaction
+          );
+          break;
+
+        case 'close':
+          await handleClose(
+            interaction
+          );
+          break;
+
+        default:
+          await interaction.reply({
+            content:
+              'That scene command is not available.',
+
+            flags:
+              MessageFlags.Ephemeral,
+          });
+      }
+    } catch (error) {
+      console.error(
+        `Unexpected error while handling /scene ${subcommand}:`,
+        error
+      );
+
+      const errorMessage =
+        'The command could not be completed. Please ask a moderator to check the Railway logs.';
+
+      if (
+        interaction.deferred
+        || interaction.replied
+      ) {
+        await interaction.editReply({
+          content: errorMessage,
+          embeds: [],
+        }).catch(() => {});
+      } else {
+        await interaction.reply({
+          content: errorMessage,
+          flags:
+            MessageFlags.Ephemeral,
+        }).catch(() => {});
+      }
     }
   }
-});
+);
 
 async function handleRegister(
   interaction,
   allowAdditional
 ) {
-  const channel = interaction.channel;
+  const channel =
+    interaction.channel;
 
-  if (!isUsableThread(interaction, channel)) {
+  if (
+    !isUsableThread(
+      interaction,
+      channel
+    )
+  ) {
     await interaction.reply({
       content: allowAdditional
         ? 'Please use `/scene register-additional` inside the reused RP thread.'
         : 'Please use `/scene register` inside the RP thread you want to record.',
-      flags: MessageFlags.Ephemeral,
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
   await interaction.deferReply({
-    flags: MessageFlags.Ephemeral,
+    flags:
+      MessageFlags.Ephemeral,
   });
 
   if (allowAdditional) {
-    const existingScenes = await getScenesByThreadId(
-      channel.id
-    );
+    const existingScenes =
+      await getScenesByThreadId(
+        channel.id
+      );
 
-    if (existingScenes.length === 0) {
+    if (
+      existingScenes.length === 0
+    ) {
       await interaction.editReply({
-        content: 'This thread does not have a first incident file yet. Use `/scene register` before adding another one.',
+        content:
+          'This thread does not have a first incident file yet. Use `/scene register` before adding another one.',
       });
 
       return;
     }
   }
 
-  const startingMessageInput = allowAdditional
-    ? interaction.options.getString('starting_message')
-    : null;
+  const startingMessageInput =
+    allowAdditional
+      ? interaction.options.getString(
+          'starting_message'
+        )
+      : null;
 
   let startingMessageUrl = null;
 
-  if (startingMessageInput !== null) {
-    const validation = validateStartingMessageUrl(
-      startingMessageInput,
-      interaction.guildId,
-      channel.id
-    );
+  if (
+    startingMessageInput !== null
+  ) {
+    const validation =
+      validateStartingMessageUrl(
+        startingMessageInput,
+        interaction.guildId,
+        channel.id
+      );
 
     if (!validation.valid) {
       await interaction.editReply({
-        content: validation.message,
+        content:
+          validation.message,
       });
 
       return;
     }
 
-    startingMessageUrl = validation.url;
+    startingMessageUrl =
+      validation.url;
   }
 
   const sceneData = {
-    guildId: interaction.guildId,
-    threadId: channel.id,
-    threadName: channel.name,
-    threadUrl: channel.url,
-    startingMessageUrl: startingMessageUrl,
-    title: interaction.options.getString('title', true),
-    location: interaction.options.getString('location', true),
-    characters: interaction.options.getString('characters', true),
-    premise: interaction.options.getString('premise', true),
-    startYear: interaction.options.getInteger('start_year', true),
-    startSeason: interaction.options.getString('start_season', true),
-    startDay: interaction.options.getInteger('start_day', true),
-    startDaypart: interaction.options.getString('start_daypart', true),
-    createdByUserId: interaction.user.id,
+    guildId:
+      interaction.guildId,
+
+    threadId:
+      channel.id,
+
+    threadName:
+      channel.name,
+
+    threadUrl:
+      channel.url,
+
+    startingMessageUrl:
+      startingMessageUrl,
+
+    title:
+      interaction.options.getString(
+        'title',
+        true
+      ),
+
+    location:
+      interaction.options.getString(
+        'location',
+        true
+      ),
+
+    characters:
+      interaction.options.getString(
+        'characters',
+        true
+      ),
+
+    premise:
+      interaction.options.getString(
+        'premise',
+        true
+      ),
+
+    startYear:
+      interaction.options.getInteger(
+        'start_year',
+        true
+      ),
+
+    startSeason:
+      interaction.options.getString(
+        'start_season',
+        true
+      ),
+
+    startDay:
+      interaction.options.getInteger(
+        'start_day',
+        true
+      ),
+
+    startDaypart:
+      interaction.options.getString(
+        'start_daypart',
+        true
+      ),
+
+    createdByUserId:
+      interaction.user.id,
   };
 
   let savedScene;
 
   try {
     savedScene = allowAdditional
-      ? await createAdditionalScene(sceneData)
-      : await createScene(sceneData);
+      ? await createAdditionalScene(
+          sceneData
+        )
+      : await createScene(
+          sceneData
+        );
   } catch (error) {
-    if (error.code === '23505') {
+    if (
+      error.code === '23505'
+    ) {
       await interaction.editReply({
         content: [
           'This thread already has a scene record.',
@@ -290,9 +473,10 @@ async function handleRegister(
   }
 
   try {
-    const archiveMessage = await publishAndAttach(
-      savedScene
-    );
+    const archiveMessage =
+      await publishAndAttach(
+        savedScene
+      );
 
     const confirmationLines = [
       `**Incident File #${savedScene.id} has been created.**`,
@@ -303,7 +487,9 @@ async function handleRegister(
       `**Public record:** ${archiveMessage.url}`,
     ];
 
-    if (savedScene.starting_message_url) {
+    if (
+      savedScene.starting_message_url
+    ) {
       confirmationLines.push(
         `**Scene begins here:** ${savedScene.starting_message_url}`
       );
@@ -317,7 +503,10 @@ async function handleRegister(
     );
 
     await interaction.editReply({
-      content: confirmationLines.join('\n'),
+      content:
+        confirmationLines.join(
+          '\n'
+        ),
     });
   } catch (error) {
     console.error(
@@ -336,48 +525,65 @@ async function handleRegister(
   }
 }
 
-async function handleView(interaction) {
-  const channel = interaction.channel;
+async function handleView(
+  interaction
+) {
+  const channel =
+    interaction.channel;
 
-  if (!isUsableThread(interaction, channel)) {
+  if (
+    !isUsableThread(
+      interaction,
+      channel
+    )
+  ) {
     await interaction.reply({
-      content: 'Please use `/scene view` inside the RP thread you want to examine.',
-      flags: MessageFlags.Ephemeral,
+      content:
+        'Please use `/scene view` inside the RP thread you want to examine.',
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
   await interaction.deferReply({
-    flags: MessageFlags.Ephemeral,
+    flags:
+      MessageFlags.Ephemeral,
   });
 
-  const fileNumber = interaction.options.getInteger(
-    'file_number'
-  );
+  const fileNumber =
+    interaction.options.getInteger(
+      'file_number'
+    );
 
-  const scenes = await getScenesByThreadId(
-    channel.id
-  );
+  const scenes =
+    await getScenesByThreadId(
+      channel.id
+    );
 
   if (scenes.length === 0) {
     await interaction.editReply({
-      content: 'This thread does not have a scene record yet.',
+      content:
+        'This thread does not have a scene record yet.',
     });
 
     return;
   }
 
   if (fileNumber !== null) {
-    const selectedScene = findSceneByNumber(
-      scenes,
-      fileNumber,
-      interaction.guildId
-    );
+    const selectedScene =
+      findSceneByNumber(
+        scenes,
+        fileNumber,
+        interaction.guildId
+      );
 
     if (!selectedScene) {
       await interaction.editReply({
-        content: `Incident File #${fileNumber} is not attached to this thread.`,
+        content:
+          `Incident File #${fileNumber} is not attached to this thread.`,
       });
 
       return;
@@ -385,7 +591,9 @@ async function handleView(interaction) {
 
     await interaction.editReply({
       embeds: [
-        buildSceneEmbed(selectedScene),
+        buildSceneEmbed(
+          selectedScene
+        ),
       ],
     });
 
@@ -395,7 +603,9 @@ async function handleView(interaction) {
   if (scenes.length === 1) {
     await interaction.editReply({
       embeds: [
-        buildSceneEmbed(scenes[0]),
+        buildSceneEmbed(
+          scenes[0]
+        ),
       ],
     });
 
@@ -404,103 +614,176 @@ async function handleView(interaction) {
 
   await interaction.editReply({
     embeds: [
-      buildThreadSceneListEmbed(scenes),
+      buildThreadSceneListEmbed(
+        scenes
+      ),
     ],
   });
 }
 
-async function handleEdit(interaction) {
-  const channel = interaction.channel;
+async function handleEdit(
+  interaction
+) {
+  const channel =
+    interaction.channel;
 
-  if (!isUsableThread(interaction, channel)) {
+  if (
+    !isUsableThread(
+      interaction,
+      channel
+    )
+  ) {
     await interaction.reply({
-      content: 'Please use `/scene edit` inside the RP thread whose record you want to correct.',
-      flags: MessageFlags.Ephemeral,
+      content:
+        'Please use `/scene edit` inside the RP thread whose record you want to correct.',
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
   await interaction.deferReply({
-    flags: MessageFlags.Ephemeral,
+    flags:
+      MessageFlags.Ephemeral,
   });
 
-  const resolution = await resolveSceneForManagement(
-    channel.id,
-    interaction.guildId,
-    interaction.options.getInteger('file_number')
-  );
+  const resolution =
+    await resolveSceneForManagement(
+      channel.id,
+      interaction.guildId,
+      interaction.options.getInteger(
+        'file_number'
+      )
+    );
 
   if (!resolution.scene) {
     await interaction.editReply({
-      content: resolution.message,
+      content:
+        resolution.message,
     });
 
     return;
   }
 
   const startingMessageInput =
-    interaction.options.getString('starting_message');
+    interaction.options.getString(
+      'starting_message'
+    );
 
   let startingMessageUrl = null;
 
-  if (startingMessageInput !== null) {
-    const validation = validateStartingMessageUrl(
-      startingMessageInput,
-      interaction.guildId,
-      channel.id
-    );
+  if (
+    startingMessageInput !== null
+  ) {
+    const validation =
+      validateStartingMessageUrl(
+        startingMessageInput,
+        interaction.guildId,
+        channel.id
+      );
 
     if (!validation.valid) {
       await interaction.editReply({
-        content: validation.message,
+        content:
+          validation.message,
       });
 
       return;
     }
 
-    startingMessageUrl = validation.url;
+    startingMessageUrl =
+      validation.url;
   }
 
   const changes = {
-    title: interaction.options.getString('title'),
-    location: interaction.options.getString('location'),
-    characters: interaction.options.getString('characters'),
-    premise: interaction.options.getString('premise'),
-    startYear: interaction.options.getInteger('start_year'),
-    startSeason: interaction.options.getString('start_season'),
-    startDay: interaction.options.getInteger('start_day'),
-    startDaypart: interaction.options.getString('start_daypart'),
-    startingMessageUrl: startingMessageInput === null
-      ? null
-      : startingMessageUrl,
+    title:
+      interaction.options.getString(
+        'title'
+      ),
+
+    location:
+      interaction.options.getString(
+        'location'
+      ),
+
+    characters:
+      interaction.options.getString(
+        'characters'
+      ),
+
+    premise:
+      interaction.options.getString(
+        'premise'
+      ),
+
+    startYear:
+      interaction.options.getInteger(
+        'start_year'
+      ),
+
+    startSeason:
+      interaction.options.getString(
+        'start_season'
+      ),
+
+    startDay:
+      interaction.options.getInteger(
+        'start_day'
+      ),
+
+    startDaypart:
+      interaction.options.getString(
+        'start_daypart'
+      ),
+
+    startingMessageUrl:
+      startingMessageInput === null
+        ? null
+        : startingMessageUrl,
   };
 
-  if (Object.values(changes).every((value) => value === null)) {
+  if (
+    Object.values(
+      changes
+    ).every(
+      (value) =>
+        value === null
+    )
+  ) {
     await interaction.editReply({
-      content: 'No changes were supplied. Run `/scene edit` again and fill in at least one field.',
+      content:
+        'No changes were supplied. Run `/scene edit` again and fill in at least one field.',
     });
 
     return;
   }
 
-  const editedScene = await editSceneById({
-    sceneId: resolution.scene.id,
-    guildId: interaction.guildId,
-    ...changes,
-  });
+  const editedScene =
+    await editSceneById({
+      sceneId:
+        resolution.scene.id,
+
+      guildId:
+        interaction.guildId,
+
+      ...changes,
+    });
 
   if (!editedScene) {
     await interaction.editReply({
-      content: 'The selected incident file could not be found.',
+      content:
+        'The selected incident file could not be found.',
     });
 
     return;
   }
 
-  const archiveResult = await refreshArchiveAfterChange(
-    editedScene
-  );
+  const archiveResult =
+    await refreshArchiveAfterChange(
+      editedScene
+    );
 
   const confirmationLines = [
     `**Incident File #${editedScene.id} has been updated.**`,
@@ -511,7 +794,9 @@ async function handleEdit(interaction) {
     `**Starting date:** ${formatSceneDate(editedScene)}`,
   ];
 
-  if (editedScene.starting_message_url) {
+  if (
+    editedScene.starting_message_url
+  ) {
     confirmationLines.push(
       `**Scene begins here:** ${editedScene.starting_message_url}`
     );
@@ -523,84 +808,123 @@ async function handleEdit(interaction) {
   );
 
   await interaction.editReply({
-    content: confirmationLines.join('\n'),
+    content:
+      confirmationLines.join(
+        '\n'
+      ),
   });
 }
 
-async function handleClose(interaction) {
-  const channel = interaction.channel;
+async function handleClose(
+  interaction
+) {
+  const channel =
+    interaction.channel;
 
-  if (!isUsableThread(interaction, channel)) {
+  if (
+    !isUsableThread(
+      interaction,
+      channel
+    )
+  ) {
     await interaction.reply({
-      content: 'Please use `/scene close` inside the RP thread containing the scene.',
-      flags: MessageFlags.Ephemeral,
+      content:
+        'Please use `/scene close` inside the RP thread containing the scene.',
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
   await interaction.deferReply({
-    flags: MessageFlags.Ephemeral,
+    flags:
+      MessageFlags.Ephemeral,
   });
 
-  const resolution = await resolveSceneForManagement(
-    channel.id,
-    interaction.guildId,
-    interaction.options.getInteger('file_number')
-  );
+  const resolution =
+    await resolveSceneForManagement(
+      channel.id,
+      interaction.guildId,
+      interaction.options.getInteger(
+        'file_number'
+      )
+    );
 
   if (!resolution.scene) {
     await interaction.editReply({
-      content: resolution.message,
+      content:
+        resolution.message,
     });
 
     return;
   }
 
-  if (resolution.scene.status === 'completed') {
+  if (
+    resolution.scene.status
+    === 'completed'
+  ) {
     await interaction.editReply({
-      content: `Incident File #${resolution.scene.id} has already been completed.`,
+      content:
+        `Incident File #${resolution.scene.id} has already been completed.`,
     });
 
     return;
   }
 
-  const completedScene = await closeSceneById({
-    sceneId: resolution.scene.id,
-    guildId: interaction.guildId,
-    finalSummary: interaction.options.getString(
-      'final_summary',
-      true
-    ),
-    endYear: interaction.options.getInteger(
-      'end_year',
-      true
-    ),
-    endSeason: interaction.options.getString(
-      'end_season',
-      true
-    ),
-    endDay: interaction.options.getInteger(
-      'end_day',
-      true
-    ),
-    endDaypart: interaction.options.getString(
-      'end_daypart',
-      true
-    ),
-  });
+  const completedScene =
+    await closeSceneById({
+      sceneId:
+        resolution.scene.id,
+
+      guildId:
+        interaction.guildId,
+
+      finalSummary:
+        interaction.options.getString(
+          'final_summary',
+          true
+        ),
+
+      endYear:
+        interaction.options.getInteger(
+          'end_year',
+          true
+        ),
+
+      endSeason:
+        interaction.options.getString(
+          'end_season',
+          true
+        ),
+
+      endDay:
+        interaction.options.getInteger(
+          'end_day',
+          true
+        ),
+
+      endDaypart:
+        interaction.options.getString(
+          'end_daypart',
+          true
+        ),
+    });
 
   if (!completedScene) {
     await interaction.editReply({
-      content: 'The selected incident file could not be found.',
+      content:
+        'The selected incident file could not be found.',
     });
 
     return;
   }
 
-  const archiveResult = await refreshArchiveAfterChange(
-    completedScene
-  );
+  const archiveResult =
+    await refreshArchiveAfterChange(
+      completedScene
+    );
 
   await interaction.editReply({
     content: [
@@ -620,47 +944,65 @@ async function handleClose(interaction) {
   });
 }
 
-async function handlePublish(interaction) {
-  const channel = interaction.channel;
+async function handlePublish(
+  interaction
+) {
+  const channel =
+    interaction.channel;
 
-  if (!isUsableThread(interaction, channel)) {
+  if (
+    !isUsableThread(
+      interaction,
+      channel
+    )
+  ) {
     await interaction.reply({
-      content: 'Please use `/scene publish` inside the RP thread containing the incident file.',
-      flags: MessageFlags.Ephemeral,
+      content:
+        'Please use `/scene publish` inside the RP thread containing the incident file.',
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
   await interaction.deferReply({
-    flags: MessageFlags.Ephemeral,
+    flags:
+      MessageFlags.Ephemeral,
   });
 
-  const resolution = await resolveSceneForManagement(
-    channel.id,
-    interaction.guildId,
-    interaction.options.getInteger('file_number')
-  );
+  const resolution =
+    await resolveSceneForManagement(
+      channel.id,
+      interaction.guildId,
+      interaction.options.getInteger(
+        'file_number'
+      )
+    );
 
   if (!resolution.scene) {
     await interaction.editReply({
-      content: resolution.message,
+      content:
+        resolution.message,
     });
 
     return;
   }
 
-  const scene = resolution.scene;
+  const scene =
+    resolution.scene;
 
   if (
     scene.archive_channel_id
     && scene.archive_message_id
   ) {
     try {
-      const updatedArchiveMessage = await updateSceneArchive(
-        client,
-        scene
-      );
+      const updatedArchiveMessage =
+        await updateSceneArchive(
+          client,
+          scene
+        );
 
       await interaction.editReply({
         content: [
@@ -681,9 +1023,10 @@ async function handlePublish(interaction) {
     }
   }
 
-  const archiveMessage = await publishAndAttach(
-    scene
-  );
+  const archiveMessage =
+    await publishAndAttach(
+      scene
+    );
 
   await interaction.editReply({
     content: [
@@ -697,45 +1040,69 @@ async function handlePublish(interaction) {
   });
 }
 
-async function handleDeleteInThread(interaction) {
-  const channel = interaction.channel;
+async function handleDeleteInThread(
+  interaction
+) {
+  const channel =
+    interaction.channel;
 
-  if (!isUsableThread(interaction, channel)) {
+  if (
+    !isUsableThread(
+      interaction,
+      channel
+    )
+  ) {
     await interaction.reply({
-      content: 'Please use `/scene delete` inside the RP thread containing the file you want to remove.',
-      flags: MessageFlags.Ephemeral,
+      content:
+        'Please use `/scene delete` inside the RP thread containing the file you want to remove.',
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
-  const confirmation = interaction.options.getString(
-    'confirmation',
-    true
-  );
+  const confirmation =
+    interaction.options.getString(
+      'confirmation',
+      true
+    );
 
-  if (!isDeleteConfirmationValid(confirmation)) {
+  if (
+    !isDeleteConfirmationValid(
+      confirmation
+    )
+  ) {
     await interaction.reply({
-      content: 'Deletion cancelled. The confirmation field must contain the word `DELETE`.',
-      flags: MessageFlags.Ephemeral,
+      content:
+        'Deletion cancelled. The confirmation field must contain the word `DELETE`.',
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
   await interaction.deferReply({
-    flags: MessageFlags.Ephemeral,
+    flags:
+      MessageFlags.Ephemeral,
   });
 
-  const resolution = await resolveSceneForManagement(
-    channel.id,
-    interaction.guildId,
-    interaction.options.getInteger('file_number')
-  );
+  const resolution =
+    await resolveSceneForManagement(
+      channel.id,
+      interaction.guildId,
+      interaction.options.getInteger(
+        'file_number'
+      )
+    );
 
   if (!resolution.scene) {
     await interaction.editReply({
-      content: resolution.message,
+      content:
+        resolution.message,
     });
 
     return;
@@ -747,47 +1114,64 @@ async function handleDeleteInThread(interaction) {
   );
 }
 
-async function handleDeleteByNumber(interaction) {
+async function handleDeleteByNumber(
+  interaction
+) {
   if (!interaction.inGuild()) {
     await interaction.reply({
-      content: 'Please use `/scene delete-file` inside the Discord server.',
-      flags: MessageFlags.Ephemeral,
+      content:
+        'Please use `/scene delete-file` inside the Discord server.',
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
-  const confirmation = interaction.options.getString(
-    'confirmation',
-    true
-  );
+  const confirmation =
+    interaction.options.getString(
+      'confirmation',
+      true
+    );
 
-  if (!isDeleteConfirmationValid(confirmation)) {
+  if (
+    !isDeleteConfirmationValid(
+      confirmation
+    )
+  ) {
     await interaction.reply({
-      content: 'Deletion cancelled. The confirmation field must contain the word `DELETE`.',
-      flags: MessageFlags.Ephemeral,
+      content:
+        'Deletion cancelled. The confirmation field must contain the word `DELETE`.',
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
   await interaction.deferReply({
-    flags: MessageFlags.Ephemeral,
+    flags:
+      MessageFlags.Ephemeral,
   });
 
-  const fileNumber = interaction.options.getInteger(
-    'file_number',
-    true
-  );
+  const fileNumber =
+    interaction.options.getInteger(
+      'file_number',
+      true
+    );
 
-  const savedScene = await getSceneById(
-    fileNumber,
-    interaction.guildId
-  );
+  const savedScene =
+    await getSceneById(
+      fileNumber,
+      interaction.guildId
+    );
 
   if (!savedScene) {
     await interaction.editReply({
-      content: `Incident File #${fileNumber} could not be found in this server.`,
+      content:
+        `Incident File #${fileNumber} could not be found in this server.`,
     });
 
     return;
@@ -799,46 +1183,61 @@ async function handleDeleteByNumber(interaction) {
   );
 }
 
-async function handleList(interaction) {
+async function handleList(
+  interaction
+) {
   if (!interaction.inGuild()) {
     await interaction.reply({
-      content: 'Please use `/scene list` inside the Discord server.',
-      flags: MessageFlags.Ephemeral,
+      content:
+        'Please use `/scene list` inside the Discord server.',
+
+      flags:
+        MessageFlags.Ephemeral,
     });
 
     return;
   }
 
   await interaction.deferReply({
-    flags: MessageFlags.Ephemeral,
+    flags:
+      MessageFlags.Ephemeral,
   });
 
-  const scenes = await getSceneList(
-    interaction.guildId
-  );
+  const scenes =
+    await getSceneList(
+      interaction.guildId
+    );
 
   if (scenes.length === 0) {
     await interaction.editReply({
-      content: 'No scene records have been filed yet.',
+      content:
+        'No scene records have been filed yet.',
     });
 
     return;
   }
 
-  const sceneListEmbed = new EmbedBuilder()
-    .setTitle('Rhyolite Scene Records')
-    .setDescription(
-      'The ten latest scenes, arranged by their in-universe starting dates.'
-    )
-    .setFooter({
-      text: 'The Rhyolite Record',
-    });
+  const sceneListEmbed =
+    new EmbedBuilder()
+      .setTitle(
+        'Rhyolite Scene Records'
+      )
+      .setDescription(
+        'The ten latest scenes, arranged by their in-universe starting dates.'
+      )
+      .setFooter({
+        text:
+          'The Rhyolite Record',
+      });
 
   for (const scene of scenes) {
-    const sceneUrl = getSceneUrl(scene);
+    const sceneUrl =
+      getSceneUrl(scene);
 
     sceneListEmbed.addFields({
-      name: `#${scene.id}: ${truncate(scene.title, 80)}`,
+      name:
+        `#${scene.id}: ${truncate(scene.title, 80)}`,
+
       value: [
         `**Date:** ${formatSceneDate(scene)}`,
         `**Status:** ${capitalize(scene.status)}`,
@@ -861,49 +1260,61 @@ async function resolveSceneForManagement(
   guildId,
   fileNumber
 ) {
-  const scenes = await getScenesByThreadId(
-    threadId
-  );
+  const scenes =
+    await getScenesByThreadId(
+      threadId
+    );
 
   if (scenes.length === 0) {
     return {
       scene: null,
-      message: 'This thread does not have a scene record yet.',
+      message:
+        'This thread does not have a scene record yet.',
     };
   }
 
   if (fileNumber !== null) {
-    const selectedScene = findSceneByNumber(
-      scenes,
-      fileNumber,
-      guildId
-    );
+    const selectedScene =
+      findSceneByNumber(
+        scenes,
+        fileNumber,
+        guildId
+      );
 
     if (!selectedScene) {
       return {
         scene: null,
-        message: `Incident File #${fileNumber} is not attached to this thread.`,
+        message:
+          `Incident File #${fileNumber} is not attached to this thread.`,
       };
     }
 
     return {
-      scene: selectedScene,
-      message: null,
+      scene:
+        selectedScene,
+
+      message:
+        null,
     };
   }
 
   if (scenes.length > 1) {
     return {
       scene: null,
-      message: buildFileNumberRequiredMessage(
-        scenes
-      ),
+
+      message:
+        buildFileNumberRequiredMessage(
+          scenes
+        ),
     };
   }
 
   return {
-    scene: scenes[0],
-    message: null,
+    scene:
+      scenes[0],
+
+    message:
+      null,
   };
 }
 
@@ -912,18 +1323,27 @@ function findSceneByNumber(
   fileNumber,
   guildId
 ) {
-  return scenes.find((scene) => (
-    String(scene.id) === String(fileNumber)
-    && String(scene.guild_id) === String(guildId)
-  )) || null;
+  return scenes.find(
+    (scene) => (
+      String(scene.id)
+        === String(fileNumber)
+
+      && String(scene.guild_id)
+        === String(guildId)
+    )
+  ) || null;
 }
 
-function buildFileNumberRequiredMessage(scenes) {
+function buildFileNumberRequiredMessage(
+  scenes
+) {
   const lines = scenes
     .slice(0, 20)
-    .map((scene) => (
-      `• **#${scene.id}** — ${truncate(scene.title, 80)} (${capitalize(scene.status)})`
-    ));
+    .map(
+      (scene) => (
+        `• **#${scene.id}** — ${truncate(scene.title, 80)} (${capitalize(scene.status)})`
+      )
+    );
 
   if (scenes.length > 20) {
     lines.push(
@@ -940,21 +1360,30 @@ function buildFileNumberRequiredMessage(scenes) {
   ].join('\n');
 }
 
-function buildThreadSceneListEmbed(scenes) {
-  const embed = new EmbedBuilder()
-    .setTitle(
-      `This Thread Contains ${scenes.length} Incident Files`
-    )
-    .setDescription(
-      'Use `/scene view file_number:` to open one full record. Moderator commands also require the correct file number for this thread.'
-    )
-    .setFooter({
-      text: 'The Rhyolite Record • Reused Thread',
-    });
+function buildThreadSceneListEmbed(
+  scenes
+) {
+  const embed =
+    new EmbedBuilder()
+      .setTitle(
+        `This Thread Contains ${scenes.length} Incident Files`
+      )
+      .setDescription(
+        'Use `/scene view file_number:` to open one full record. Moderator commands also require the correct file number for this thread.'
+      )
+      .setFooter({
+        text:
+          'The Rhyolite Record • Reused Thread',
+      });
 
-  for (const scene of scenes.slice(0, 20)) {
+  for (
+    const scene
+    of scenes.slice(0, 20)
+  ) {
     embed.addFields({
-      name: `#${scene.id}: ${truncate(scene.title, 80)}`,
+      name:
+        `#${scene.id}: ${truncate(scene.title, 80)}`,
+
       value: [
         `**Date:** ${formatSceneDate(scene)}`,
         `**Status:** ${capitalize(scene.status)}`,
@@ -973,7 +1402,9 @@ function buildThreadSceneListEmbed(scenes) {
   return embed;
 }
 
-function buildSceneEmbed(scene) {
+function buildSceneEmbed(
+  scene
+) {
   const descriptionLines = [
     '**Premise**',
     scene.premise,
@@ -990,51 +1421,82 @@ function buildSceneEmbed(scene) {
     );
   }
 
-  const sceneUrl = getSceneUrl(scene);
+  const sceneUrl =
+    getSceneUrl(scene);
 
-  const sceneEmbed = new EmbedBuilder()
-    .setTitle(
-      `Incident File #${scene.id}: ${scene.title}`
-    )
-    .setURL(sceneUrl)
-    .setDescription(
-      descriptionLines.join('\n')
-    )
-    .addFields(
-      {
-        name: 'Location',
-        value: scene.location,
-      },
-      {
-        name: 'Characters',
-        value: scene.characters,
-      },
-      {
-        name: 'Starting Date',
-        value: formatSceneDate(scene),
-      },
-      {
-        name: 'Status',
-        value: capitalize(scene.status),
-      },
-      {
-        name: scene.starting_message_url
-          ? 'Scene Starting Point'
-          : 'Recorded Thread',
-        value: `[Open the scene](${sceneUrl})`,
-      }
-    )
-    .setFooter({
-      text: 'The Rhyolite Record',
-    });
+  const sceneEmbed =
+    new EmbedBuilder()
+      .setTitle(
+        `Incident File #${scene.id}: ${scene.title}`
+      )
+      .setURL(
+        sceneUrl
+      )
+      .setDescription(
+        descriptionLines.join(
+          '\n'
+        )
+      )
+      .addFields(
+        {
+          name:
+            'Location',
+
+          value:
+            scene.location,
+        },
+        {
+          name:
+            'Characters',
+
+          value:
+            scene.characters,
+        },
+        {
+          name:
+            'Starting Date',
+
+          value:
+            formatSceneDate(
+              scene
+            ),
+        },
+        {
+          name:
+            'Status',
+
+          value:
+            capitalize(
+              scene.status
+            ),
+        },
+        {
+          name:
+            scene.starting_message_url
+              ? 'Scene Starting Point'
+              : 'Recorded Thread',
+
+          value:
+            `[Open the scene](${sceneUrl})`,
+        }
+      )
+      .setFooter({
+        text:
+          'The Rhyolite Record',
+      });
 
   if (
     scene.status === 'completed'
     && scene.end_year
   ) {
     sceneEmbed.addFields({
-      name: 'Ending Date',
-      value: formatEndingDate(scene),
+      name:
+        'Ending Date',
+
+      value:
+        formatEndingDate(
+          scene
+        ),
     });
   }
 
@@ -1049,22 +1511,32 @@ function buildSceneEmbed(scene) {
   return sceneEmbed;
 }
 
-async function publishAndAttach(scene) {
-  const archiveMessage = await publishSceneArchive(
-    client,
-    scene
-  );
+async function publishAndAttach(
+  scene
+) {
+  const archiveMessage =
+    await publishSceneArchive(
+      client,
+      scene
+    );
 
   await attachArchiveMessage({
-    channelId: archiveMessage.channelId,
-    messageId: archiveMessage.id,
-    sceneId: scene.id,
+    channelId:
+      archiveMessage.channelId,
+
+    messageId:
+      archiveMessage.id,
+
+    sceneId:
+      scene.id,
   });
 
   return archiveMessage;
 }
 
-async function refreshArchiveAfterChange(scene) {
+async function refreshArchiveAfterChange(
+  scene
+) {
   if (
     !scene.archive_channel_id
     || !scene.archive_message_id
@@ -1073,10 +1545,11 @@ async function refreshArchiveAfterChange(scene) {
   }
 
   try {
-    const updatedMessage = await updateSceneArchive(
-      client,
-      scene
-    );
+    const updatedMessage =
+      await updateSceneArchive(
+        client,
+        scene
+      );
 
     return `**Public record updated:** ${updatedMessage.url}`;
   } catch (error) {
@@ -1096,9 +1569,10 @@ async function deleteSelectedScene(
   let archiveResult;
 
   try {
-    archiveResult = await deleteArchiveCard(
-      scene
-    );
+    archiveResult =
+      await deleteArchiveCard(
+        scene
+      );
   } catch (error) {
     console.error(
       'Could not delete public archive card:',
@@ -1116,10 +1590,11 @@ async function deleteSelectedScene(
     return;
   }
 
-  const deletedScene = await deleteSceneById(
-    scene.id,
-    scene.guild_id
-  );
+  const deletedScene =
+    await deleteSceneById(
+      scene.id,
+      scene.guild_id
+    );
 
   if (!deletedScene) {
     await interaction.editReply({
@@ -1148,7 +1623,9 @@ async function deleteSelectedScene(
   });
 }
 
-async function deleteArchiveCard(scene) {
+async function deleteArchiveCard(
+  scene
+) {
   if (
     !scene.archive_channel_id
     || !scene.archive_message_id
@@ -1157,9 +1634,10 @@ async function deleteArchiveCard(scene) {
   }
 
   try {
-    const archiveChannel = await client.channels.fetch(
-      scene.archive_channel_id
-    );
+    const archiveChannel =
+      await client.channels.fetch(
+        scene.archive_channel_id
+      );
 
     if (
       !archiveChannel
@@ -1171,15 +1649,20 @@ async function deleteArchiveCard(scene) {
       );
     }
 
-    const archiveMessage = await archiveChannel.messages.fetch(
-      scene.archive_message_id
-    );
+    const archiveMessage =
+      await archiveChannel.messages.fetch(
+        scene.archive_message_id
+      );
 
     await archiveMessage.delete();
 
     return 'The public archive card was deleted.';
   } catch (error) {
-    if (isMissingDiscordResource(error)) {
+    if (
+      isMissingDiscordResource(
+        error
+      )
+    ) {
       return 'The public archive card was already missing.';
     }
 
@@ -1192,16 +1675,23 @@ function validateStartingMessageUrl(
   guildId,
   threadId
 ) {
-  const trimmedInput = input.trim();
+  const trimmedInput =
+    input.trim();
 
   let parsedUrl;
 
   try {
-    parsedUrl = new URL(trimmedInput);
+    parsedUrl =
+      new URL(
+        trimmedInput
+      );
   } catch {
     return {
-      valid: false,
-      message: 'The starting-message field must contain a complete Discord message link copied with **Copy Message Link**.',
+      valid:
+        false,
+
+      message:
+        'The starting-message field must contain a complete Discord message link copied with **Copy Message Link**.',
     };
   }
 
@@ -1214,46 +1704,75 @@ function validateStartingMessageUrl(
     'canary.discordapp.com',
   ]);
 
-  const pathParts = parsedUrl.pathname
-    .split('/')
-    .filter(Boolean);
+  const pathParts =
+    parsedUrl.pathname
+      .split('/')
+      .filter(Boolean);
 
   if (
     parsedUrl.protocol !== 'https:'
-    || !allowedHosts.has(parsedUrl.hostname)
+    || !allowedHosts.has(
+      parsedUrl.hostname
+    )
     || pathParts[0] !== 'channels'
     || pathParts.length < 4
-    || !/^\d+$/.test(pathParts[1])
-    || !/^\d+$/.test(pathParts[2])
-    || !/^\d+$/.test(pathParts[3])
+    || !/^\d+$/.test(
+      pathParts[1]
+    )
+    || !/^\d+$/.test(
+      pathParts[2]
+    )
+    || !/^\d+$/.test(
+      pathParts[3]
+    )
   ) {
     return {
-      valid: false,
-      message: 'That does not look like a valid Discord message link. Right-click the first message of the scene and choose **Copy Message Link**.',
+      valid:
+        false,
+
+      message:
+        'That does not look like a valid Discord message link. Right-click the first message of the scene and choose **Copy Message Link**.',
     };
   }
 
-  if (pathParts[1] !== String(guildId)) {
+  if (
+    pathParts[1]
+    !== String(guildId)
+  ) {
     return {
-      valid: false,
-      message: 'That message link belongs to a different Discord server.',
+      valid:
+        false,
+
+      message:
+        'That message link belongs to a different Discord server.',
     };
   }
 
-  if (pathParts[2] !== String(threadId)) {
+  if (
+    pathParts[2]
+    !== String(threadId)
+  ) {
     return {
-      valid: false,
-      message: 'That message link belongs to a different channel or thread. Copy the first message from the current RP thread.',
+      valid:
+        false,
+
+      message:
+        'That message link belongs to a different channel or thread. Copy the first message from the current RP thread.',
     };
   }
 
   return {
-    valid: true,
-    url: `https://discord.com/channels/${pathParts[1]}/${pathParts[2]}/${pathParts[3]}`,
+    valid:
+      true,
+
+    url:
+      `https://discord.com/channels/${pathParts[1]}/${pathParts[2]}/${pathParts[3]}`,
   };
 }
 
-function getSceneUrl(scene) {
+function getSceneUrl(
+  scene
+) {
   return scene.starting_message_url
     || scene.thread_url;
 }
@@ -1269,14 +1788,22 @@ function isUsableThread(
   );
 }
 
-function isDeleteConfirmationValid(value) {
-  return value.trim().toUpperCase() === 'DELETE';
+function isDeleteConfirmationValid(
+  value
+) {
+  return (
+    value.trim().toUpperCase()
+    === 'DELETE'
+  );
 }
 
-function isMissingDiscordResource(error) {
-  const errorCode = Number(
-    error?.code
-  );
+function isMissingDiscordResource(
+  error
+) {
+  const errorCode =
+    Number(
+      error?.code
+    );
 
   return (
     errorCode === 10008
@@ -1284,39 +1811,68 @@ function isMissingDiscordResource(error) {
   );
 }
 
-function formatSceneDate(scene) {
+function formatSceneDate(
+  scene
+) {
   return `${capitalize(scene.start_season)} ${scene.start_day}, Year ${scene.start_year} — ${capitalize(scene.start_daypart)}`;
 }
 
-function formatEndingDate(scene) {
+function formatEndingDate(
+  scene
+) {
   return `${capitalize(scene.end_season)} ${scene.end_day}, Year ${scene.end_year} — ${capitalize(scene.end_daypart)}`;
 }
 
-function capitalize(word) {
+function capitalize(
+  word
+) {
   if (!word) {
     return 'Unspecified';
   }
 
-  return word.charAt(0).toUpperCase()
-    + word.slice(1);
+  return (
+    word.charAt(0).toUpperCase()
+    + word.slice(1)
+  );
 }
 
-function truncate(text, maximumLength) {
-  if (text.length <= maximumLength) {
+function truncate(
+  text,
+  maximumLength
+) {
+  if (
+    text.length
+    <= maximumLength
+  ) {
     return text;
   }
 
   return `${text.slice(0, maximumLength - 3)}...`;
 }
 
-client.on(Events.Error, (error) => {
-  console.error('Discord client error:', error);
-});
+client.on(
+  Events.Error,
+  (error) => {
+    console.error(
+      'Discord client error:',
+      error
+    );
+  }
+);
 
-process.on('SIGTERM', () => {
-  console.log('Received SIGTERM from Railway. Disconnecting from Discord.');
-  client.destroy();
-  process.exit(0);
-});
+process.on(
+  'SIGTERM',
+  () => {
+    console.log(
+      'Received SIGTERM from Railway. Disconnecting from Discord.'
+    );
 
-client.login(process.env.DISCORD_TOKEN);
+    client.destroy();
+
+    process.exit(0);
+  }
+);
+
+client.login(
+  process.env.DISCORD_TOKEN
+);
