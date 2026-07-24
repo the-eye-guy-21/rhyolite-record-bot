@@ -450,10 +450,8 @@ async function attachArchiveMessage(
     sceneArchive.sceneId || null;
 
   /*
-   * This fallback keeps the current version of
-   * index.js working until the next replacement.
-   * It is only allowed when the thread contains
-   * exactly one incident file.
+   * This fallback keeps older one-scene
+   * registration code working safely.
    */
   if (
     !sceneId
@@ -500,6 +498,152 @@ async function attachArchiveMessage(
   return result.rows[0];
 }
 
+async function createPlotPoint(plotPoint) {
+  const query = `
+    INSERT INTO plot_points (
+      guild_id,
+      entry_type,
+      title,
+      summary,
+      people,
+      location,
+      source_url,
+      event_year,
+      event_season,
+      event_day,
+      event_daypart,
+      created_by_user_id
+    )
+    VALUES (
+      $1,
+      $2,
+      $3,
+      $4,
+      $5,
+      $6,
+      $7,
+      $8,
+      $9,
+      $10,
+      $11,
+      $12
+    )
+    RETURNING *;
+  `;
+
+  const values = [
+    plotPoint.guildId,
+    plotPoint.entryType,
+    plotPoint.title,
+    plotPoint.summary,
+    plotPoint.people || null,
+    plotPoint.location || null,
+    plotPoint.sourceUrl || null,
+    plotPoint.eventYear,
+    plotPoint.eventSeason,
+    plotPoint.eventDay,
+    plotPoint.eventDaypart,
+    plotPoint.createdByUserId,
+  ];
+
+  const result = await pool.query(
+    query,
+    values
+  );
+
+  return result.rows[0];
+}
+
+async function getPlotPointById(
+  plotPointId,
+  guildId
+) {
+  const query = `
+    SELECT *
+    FROM plot_points
+    WHERE id = $1
+      AND guild_id = $2
+    LIMIT 1;
+  `;
+
+  const values = [
+    plotPointId,
+    guildId,
+  ];
+
+  const result = await pool.query(
+    query,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+async function attachPlotArchiveMessage(
+  plotArchive
+) {
+  const query = `
+    UPDATE plot_points
+    SET
+      archive_channel_id = $1,
+      archive_message_id = $2,
+      updated_at = NOW()
+    WHERE id = $3
+      AND guild_id = $4
+    RETURNING *;
+  `;
+
+  const values = [
+    plotArchive.channelId,
+    plotArchive.messageId,
+    plotArchive.plotPointId,
+    plotArchive.guildId,
+  ];
+
+  const result = await pool.query(
+    query,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
+async function deletePlotPointById(
+  plotPointId,
+  guildId
+) {
+  const query = `
+    DELETE FROM plot_points
+    WHERE id = $1
+      AND guild_id = $2
+    RETURNING *;
+  `;
+
+  const values = [
+    plotPointId,
+    guildId,
+  ];
+
+  const result = await pool.query(
+    query,
+    values
+  );
+
+  if (result.rows.length === 0) {
+    return null;
+  }
+
+  return result.rows[0];
+}
+
 function createAmbiguousSceneError(
   threadId
 ) {
@@ -515,15 +659,19 @@ function createAmbiguousSceneError(
 
 module.exports = {
   attachArchiveMessage,
+  attachPlotArchiveMessage,
   closeScene,
   closeSceneById,
   createAdditionalScene,
+  createPlotPoint,
   createScene,
+  deletePlotPointById,
   deleteScene,
   deleteSceneById,
   editScene,
   editSceneById,
   getOnlySceneByThreadId,
+  getPlotPointById,
   getSceneById,
   getSceneByThreadId,
   getSceneList,
