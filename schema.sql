@@ -122,3 +122,73 @@ ON scenes (thread_id);
 CREATE UNIQUE INDEX IF NOT EXISTS scenes_archive_message_id_unique
 ON scenes (archive_message_id)
 WHERE archive_message_id IS NOT NULL;
+
+
+CREATE TABLE IF NOT EXISTS plot_points (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+
+  guild_id TEXT NOT NULL,
+
+  archive_channel_id TEXT,
+  archive_message_id TEXT,
+
+  entry_type TEXT NOT NULL
+    CHECK (
+      entry_type IN (
+        'event',
+        'arrival',
+        'departure',
+        'discovery',
+        'lore',
+        'town_change',
+        'other'
+      )
+    ),
+
+  title TEXT NOT NULL,
+  summary TEXT NOT NULL,
+
+  people TEXT,
+  location TEXT,
+  source_url TEXT,
+
+  event_year INTEGER NOT NULL
+    CHECK (event_year >= 1),
+
+  event_season TEXT NOT NULL
+    CHECK (
+      event_season IN (
+        'spring',
+        'summer',
+        'fall',
+        'winter'
+      )
+    ),
+
+  event_day INTEGER NOT NULL
+    CHECK (event_day BETWEEN 1 AND 28),
+
+  event_daypart TEXT NOT NULL DEFAULT 'unspecified'
+    CHECK (
+      event_daypart IN (
+        'morning',
+        'midmorning',
+        'afternoon',
+        'evening',
+        'night',
+        'unspecified'
+      )
+    ),
+
+  created_by_user_id TEXT NOT NULL,
+
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS plot_points_guild_id_index
+ON plot_points (guild_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS plot_points_archive_message_id_unique
+ON plot_points (archive_message_id)
+WHERE archive_message_id IS NOT NULL;
